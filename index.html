@@ -466,6 +466,9 @@ function plOpenCfgShifts(){
   box.style.display = '';
   box.innerHTML = `
     <div style="font-size:11px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">Add a shift for ${PL_AGENCY_SCENARIOS[target]?.name || target}</div>
+    <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:8px;line-height:1.4;">
+      ⓘ Mock-up only — fields shown (Name/Start/End) are simplified for this prototype and don't reflect the real Configure Shifts form (which also has Discipline, Reference Shift, Code, and Break).
+    </div>
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
       <div><label style="font-size:10px;color:#555;display:block;">Name</label>
         <input type="text" id="plCfgName" value="AM" style="height:28px;border:1px solid #c7d9f0;border-radius:4px;padding:0 6px;font-size:11px;width:70px;"></div>
