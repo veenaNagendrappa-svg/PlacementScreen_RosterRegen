@@ -227,6 +227,11 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   </div>
 
   <div id="plRosterContent">
+    <div style="font-size:10.5px;color:#374151;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:5px 8px;margin-bottom:8px;line-height:1.5;">
+      <strong>Legend:</strong> plain row = match within 4 hours of the requested time &nbsp;·&nbsp;
+      <span style="color:#c62828;font-weight:700;">!</span> = a match was found but it's <strong>more than 4 hours</strong> from the requested time &nbsp;·&nbsp;
+      <span style="color:#92400e;">"No matching shift found"</span> = no selected agency had anything available that day
+    </div>
     <div id="plBanners"></div>
     <div id="plWeeks"></div>
   </div>
@@ -446,6 +451,9 @@ function plRenderCfgBox(names, missing){
     <div style="font-size:11px;color:#374151;margin-bottom:8px;">${missing.length} of ${names.length} selected agencies don't have shifts configured for this discipline.</div>
     <label class="field-label" style="font-size:10px;">Configure shifts for</label>
     <select class="field-select" style="height:32px;font-size:12px;margin-bottom:8px;" onchange="_plCfgRadioTarget=this.value">${options}</select>
+    <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:8px;line-height:1.4;">
+      ⓘ Mock-up only — not a proposed design for the real Configure Shifts screen.
+    </div>
     <div>
       <button class="rna-card-btn secondary" style="height:28px;padding:0 12px;font-size:11px;" onclick="plOpenCfgShifts()">Configure shifts</button>
     </div>
