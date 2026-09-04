@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Placement 103378 — Roster Regeneration Demo</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#fff; color:#111827; }
+
+
+.page-header { padding:16px 24px 0; border-bottom:1px solid #e5e7eb; }
+.page-title { font-size:16px; font-weight:700; color:#111827; margin-bottom:2px; }
+.page-subtitle { font-size:12px; color:#6b7280; padding-bottom:12px; }
+
+.page-body { max-width:960px; margin:0; padding:20px 24px 60px; }
+
+/* Loose approximation of the real page's Bootstrap row/col grid —
+   not importing Bootstrap itself, just matching the visual proportions */
+.row { display:flex; flex-wrap:wrap; gap:0 20px; margin-bottom:16px; }
+.col-md-6 { flex:1 1 calc(50% - 10px); min-width:260px; }
+.col-12 { flex:1 1 100%; }
+
+.field-label { display:block; font-size:11px; font-weight:500; color:#374151; margin-bottom:4px; }
+.field-label .req { color:#dc2626; margin-left:2px; }
+.field-input, .field-select {
+  width:100%; height:36px; border:1px solid #d1d5db; border-radius:4px;
+  padding:0 10px; font-family:inherit; font-size:13px; color:#111827;
+  background:white; outline:none;
+}
+.field-input:focus, .field-select:focus { border-color:#1976d2; box-shadow:0 0 0 2px rgba(25,118,210,.12); }
+.field-input[readonly] { background:#f9fafb; color:#6b7280; }
+
+.section-title { font-size:13px; font-weight:700; color:#1976d2; text-transform:uppercase; letter-spacing:.04em; padding:20px 0 12px; border-top:1px solid #f0f2f5; margin-top:8px; }
+
+.toggle-wrap { display:flex; align-items:center; gap:8px; padding:4px 0; }
+.toggle-track { width:36px; height:20px; border-radius:10px; background:#1976d2; position:relative; cursor:pointer; flex-shrink:0; }
+.toggle-knob { position:absolute; top:2px; left:18px; width:16px; height:16px; border-radius:50%; background:white; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.toggle-label { font-size:13px; color:#374151; }
+
+.btn-outline { height:36px; padding:0 16px; border:1.5px solid #1976d2; background:white; border-radius:5px; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; color:#1976d2; }
+.btn-solid { height:36px; padding:0 16px; border:none; background:#1976d2; border-radius:5px; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; color:white; }
+.btn-outline:disabled, .btn-solid:disabled { opacity:.4; cursor:not-allowed; }
+.page-footer { display:flex; gap:10px; justify-content:flex-end; padding:16px 24px; border-top:1px solid #e5e7eb; background:#fafafa; position:sticky; bottom:0; }
+
+.ae-banner-pill{display:inline-flex;align-items:center;gap:4px;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:3px 8px;font-size:10.5px;font-weight:600;color:#92400e;white-space:nowrap;margin:0 6px 6px 0;}
+.ae-roster-day-mismatch{background:#fef3c7!important;}
+.ae-notscheduled{color:#9ca3af;font-style:italic;font-size:11px;}
+.ae-roster-edit-link{font-size:11px;color:#1976d2;text-decoration:none;cursor:pointer;}
+.ae-roster-edit-link:hover{text-decoration:underline;}
+
+/* "Roster needs attention" inline card — button count varies (2 or 3),
+   built dynamically since divergence is the deciding factor here */
+.rna-card{ background:#eef3f8;border:1px solid #b9d3f0;border-radius:8px; padding:14px 16px;margin:8px 0 16px; }
+.rna-card-title{font-size:13px;font-weight:700;color:#003179;margin-bottom:8px;}
+.rna-card-desc{font-size:12px;color:#374151;line-height:1.5;margin-bottom:14px;}
+.rna-card-ftr{display:flex;justify-content:flex-end;align-items:center;gap:16px;flex-wrap:wrap;}
+.rna-card-link{ background:none;border:none;padding:0;cursor:pointer; font-family:inherit;font-size:11px;font-weight:600;color:#555; }
+.rna-card-link:hover{color:#003179;text-decoration:underline;}
+.rna-card-btn{ height:32px;padding:0 18px;border:none;border-radius:5px; background:#003179;color:white;cursor:pointer; font-family:inherit;font-size:11px;font-weight:600; }
+.rna-card-btn:hover{background:#002060;}
+.rna-card-btn.secondary{ background:white;border:1.5px solid #003179;color:#003179; }
+.rna-card-btn.secondary:hover{background:#eef3f8;}
+.rna-card-btn:disabled{background:#8a94a3;color:#f0f1f3;cursor:not-allowed;}
+.rna-card-btn:disabled:hover{background:#8a94a3;}
+.rna-card-btn.secondary:disabled{background:white;border-color:#c3c9d1;color:#9ca3af;cursor:not-allowed;}
+.rna-card-btn.secondary:disabled:hover{background:white;}
+
+
+/* Multi-select agency field — same pattern as the Process Request prototype */
+.ms-wrap{position:relative;width:100%}
+.ms-display{
+  height:36px;border:1px solid #d1d5db;border-radius:4px;background:white;cursor:pointer;width:100%;
+  display:flex;align-items:center;justify-content:space-between;padding:0 10px;
+  font-family:inherit;font-size:13px;color:#111827;user-select:none;
+}
+.ms-display.open{border-color:#1976d2;box-shadow:0 0 0 2px rgba(25,118,210,.12);}
+.ms-value{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.ms-value.placeholder{color:#9ca3af;}
+.ms-chevron{width:10px;height:7px;flex-shrink:0;fill:#9ca3af;transition:transform .2s;}
+.ms-display.open .ms-chevron{transform:rotate(180deg);}
+.ms-dropdown{
+  position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:1px solid #e0e0e0;
+  border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:50;max-height:220px;overflow-y:auto;display:none;
+}
+.ms-dropdown.open{display:block;}
+.ms-option{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#333;}
+.ms-option:hover{background:#f5f5f5;}
+.ms-option input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#1976d2;flex-shrink:0;}
+
+/* Radio + shared button pattern for "which agency to configure" — matches
+   the doc's reviewed 1:N interaction (selecting only changes the
+   configure target, never the regen pool). */
+.pl-cfg-inline{background:rgba(255,255,255,0.5);border:1px solid #c7d9f0;border-radius:6px;padding:12px 14px;margin:10px 0;}
+.pl-cfg-inline h4{font-size:12px;font-weight:700;color:#1a1a1a;margin:0 0 8px;}
+
+.alloc-toast{position:fixed;bottom:24px;right:24px;background:#1e293b;color:white;
+  padding:12px 16px;border-radius:8px;font-size:12px;max-width:320px;
+  box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;pointer-events:none;
+  transform:translateY(8px);transition:all .25s;z-index:600;}
+.alloc-toast.show{opacity:1;transform:translateY(0);}
+.alloc-toast-title{font-weight:700;margin-bottom:2px;}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title">103378 — SAA-C — Jan-15</div>
+  <div class="page-subtitle">ACU · Nursing · General Medical</div>
+</div>
+
+<div class="page-body">
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Education Provider</label>
+      <input class="field-input" value="Australian Catholic University" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Campus</label>
+      <input class="field-input" value="Melbourne" readonly>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Program Type</label>
+      <input class="field-input" value="Undergraduate" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Discipline</label>
+      <input class="field-input" value="Nursing" readonly>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Program</label>
+      <input class="field-input" value="Bachelor of Nursing" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Placement Type</label>
+      <input class="field-input" value="General Medical" readonly>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Year Level</label>
+      <input class="field-input" value="Year 3" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Placement Group</label>
+      <input class="field-input" value="SAA-C Jan-15" readonly>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Region <span class="req">*</span></label>
+      <input class="field-input" value="Victoria" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Agency <span class="req">*</span></label>
+      <div id="plAgencyHint" style="font-size:10.5px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:5px 8px;margin-bottom:5px;line-height:1.4;">
+        💡 Try: uncheck the current agencies and select <strong>Agency E</strong> to see Configure Shifts (Agency E has no shifts). Add <strong>Agency F</strong> alongside it to see N:N with one agency needing configuration.
+      </div>
+      <div class="ms-wrap" id="plAgencyDd">
+        <div class="ms-display" id="plAgencyDisplay" onclick="plAgencyDdToggle()">
+          <span class="ms-value placeholder" id="plAgencyDisplayVal">— Select agency —</span>
+          <svg class="ms-chevron" viewBox="0 0 10 7"><path d="M0 0l5 7 5-7z"/></svg>
+        </div>
+        <div class="ms-dropdown" id="plAgencyDdList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Placement Dates <span class="req">*</span></label>
+      <input class="field-input" value="15/01/2026 – 09/02/2026" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Duration <span class="req">*</span></label>
+      <input class="field-input" value="18 Days" readonly>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <label class="field-label">Fixed Dates</label>
+      <input class="field-input" value="No" readonly>
+    </div>
+    <div class="col-md-6">
+      <label class="field-label">Fixed Duration</label>
+      <input class="field-input" value="No" readonly>
+    </div>
+  </div>
+
+  <div class="section-title">Schedule</div>
+
+  <div class="row">
+    <div class="col-12">
+      <label class="field-label">Specify Roster</label>
+      <div class="toggle-wrap">
+        <div class="toggle-track"><div class="toggle-knob"></div></div>
+        <span class="toggle-label">On — specify roster pattern</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- "Roster needs attention" card — content built dynamically since
+       the button count varies (2-way vs 3-way) -->
+  <div class="rna-card" id="plCard" style="display:none;">
+    <div class="rna-card-title">Roster needs attention</div>
+    <div class="rna-card-desc" id="plCardDesc"></div>
+    <div style="display:flex;gap:24px;margin:10px 0;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">Current agency</div>
+        <div id="plCardCurrentAgency" style="font-size:13px;color:#374151;padding-bottom:6px;border-bottom:1px solid #d7e2f0;"></div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">New agency</div>
+        <div id="plCardNewAgency" style="font-size:13px;color:#374151;padding-bottom:6px;border-bottom:1px solid #d7e2f0;"></div>
+      </div>
+    </div>
+    <div class="rna-card-ftr" id="plCardFtr"></div>
+  </div>
+
+  <div id="plRosterContent">
+    <div id="plBanners"></div>
+    <div id="plWeeks"></div>
+  </div>
+
+</div>
+
+<div class="page-footer">
+  <button class="btn-outline" id="plBtnPublish" onclick="plToast('Placement published', 'Changes saved and published.')">Publish</button>
+  <button class="btn-solid" id="plBtnSave" onclick="plToast('Placement saved', 'Changes saved as draft.')">Save</button>
+</div>
+
+<div class="alloc-toast" id="plToast">
+  <div class="alloc-toast-title" id="plToastTitle"></div>
+  <div id="plToastBody"></div>
+</div>
+
+<script>
+// ── Demo data ────────────────────────────────────────────────────
+// Two source rosters, matching the file's original divergence concept:
+// what the placement itself currently has vs. what the original request
+// asked for. Either can be the anchor for a regenerate, per Felix's
+// Aug 18/21 confirmation on the 2-vs-3-button card.
+const PLACEMENT_ROSTER = { days:['Mon','Wed','Fri'], start:'06:30', end:'15:30', shift:'AM' };
+const REQUEST_ROSTER   = { days:['Mon','Fri'], start:'06:30', end:'15:30', shift:'AM' };
+
+// Four agencies — enough to demonstrate every combination: C and D were
+// already here (clean + mixed match); E is zero-shift (Configure Shifts
+// path); F is a second clean option so N:N has something to actually
+// choose between.
+const PL_AGENCY_LIST = ['agencyc','agencyd','agencye','agencyf'];
+const PL_AGENCY_SCENARIOS = {
+  agencyc: { name:'(SA) Agency C', shifts:{
+    Mon:{shift:'AM', start:'06:30', end:'15:30'},
+    Wed:{shift:'AM', start:'06:30', end:'15:30'},
+    Fri:{shift:'AM', start:'06:30', end:'15:30'}
+  }},
+  agencyd: { name:'(SA) Agency D', shifts:{
+    Mon:{shift:'PM', start:'11:00', end:'19:30', flag:'differs'}, // >4hr, flagged
+    Wed:null,                                                      // no match
+    Fri:{shift:'AM', start:'08:00', end:'16:30'}                   // <4hr, clean
+  }},
+  agencye: { name:'(SA) Agency E', shifts:{} },                     // zero shifts — Configure Shifts path
+  agencyf: { name:'(SA) Agency F', shifts:{
+    Mon:{shift:'AM', start:'06:45', end:'15:00'},                  // clean, near-tie with C
+    Wed:{shift:'AM', start:'07:00', end:'15:30'},                  // clean
+    Fri:null
+  }}
+};
+
+// Genuinely computed — no manual simulation. The placement's roster has
+// diverged from the original request's whenever the two don't cover the
+// same days. This is what decides the 2-vs-3-button split below, driven
+// by the actual PLACEMENT_ROSTER / REQUEST_ROSTER data rather than a
+// demo toggle.
+function plIsDiverged(){
+  const a = [...PLACEMENT_ROSTER.days].sort();
+  const b = [...REQUEST_ROSTER.days].sort();
+  if(a.length !== b.length) return true;
+  return !a.every((d,i) => d === b[i]);
+}
+// The placement's CURRENT agency state — deliberately seeded with TWO
+// agencies already on it, since a Placement (unlike a Request) can
+// genuinely span several agencies at once. This is what makes N:1 and
+// N:N real starting points here, not just 1:1/1:N.
+let _plCurrentAgencies = ['agencyc','agencyd'];
+let _plSelectedAgencies = [..._plCurrentAgencies];
+let _plCfgRadioTarget = null;
+
+function plHasExistingRoster(){
+  const weeks = document.getElementById('plWeeks');
+  return !!(weeks && weeks.innerHTML.trim());
+}
+
+function plSetActionButtonsDisabled(disabled){
+  document.getElementById('plBtnPublish').disabled = disabled;
+  document.getElementById('plBtnSave').disabled = disabled;
+}
+
+// ── Multi-select Agency field ───────────────────────────────────────
+function plAgencyDdToggle(){
+  const dd = document.getElementById('plAgencyDdList');
+  const disp = document.getElementById('plAgencyDisplay');
+  const isOpen = dd.classList.contains('open');
+  if(isOpen){ dd.classList.remove('open'); disp.classList.remove('open'); return; }
+  plAgencyDdRender();
+  dd.classList.add('open'); disp.classList.add('open');
+}
+function plAgencyDdRender(){
+  document.getElementById('plAgencyDdList').innerHTML = PL_AGENCY_LIST.map(key=>{
+    const sc = PL_AGENCY_SCENARIOS[key];
+    const checked = _plSelectedAgencies.includes(key) ? 'checked' : '';
+    return `<label class="ms-option"><input type="checkbox" value="${key}" ${checked} onchange="plAgencyToggle(this)"> ${sc?sc.name:key}</label>`;
+  }).join('');
+}
+function plAgencyToggle(cb){
+  const key = cb.value, checked = cb.checked;
+  const idx = _plSelectedAgencies.indexOf(key);
+  if(checked && idx < 0) _plSelectedAgencies.push(key);
+  if(!checked && idx >= 0) _plSelectedAgencies.splice(idx, 1);
+  plUpdateAgencyDisplay();
+  plOnSelectionChanged();
+}
+function plUpdateAgencyDisplay(){
+  const el = document.getElementById('plAgencyDisplayVal');
+  const names = _plSelectedAgencies.map(k => PL_AGENCY_SCENARIOS[k]?.name || k);
+  if(!names.length){ el.textContent = '— Select agency —'; el.className = 'ms-value placeholder'; return; }
+  el.className = 'ms-value';
+  el.textContent = names.length === 1 ? names[0] : `${names[0]} (+${names.length - 1} other${names.length > 2 ? 's' : ''})`;
+}
+document.addEventListener('click', function(e){
+  const wrap = document.getElementById('plAgencyDd');
+  if(wrap && !wrap.contains(e.target)){
+    document.getElementById('plAgencyDdList').classList.remove('open');
+    document.getElementById('plAgencyDisplay').classList.remove('open');
+  }
+});
+
+
+
+// ── Selection change → roster-needs-attention card ──────────────────
+function plOnSelectionChanged(){
+  plCloseCfgPanel();
+  // If AT LEAST ONE agency actually providing a day in the current
+  // roster is still in the new selection, this is additive, not a
+  // replacement — same rule as Process Request: retaining the real
+  // source of the roster means it's still at least partly valid.
+  // Deliberately checked against _plActiveAgencyKeys (who's actually
+  // winning days) rather than the nominal _plCurrentAgencies list — an
+  // agency can be nominally "current" without ever having won a single
+  // day's closest-match tie-break, so it isn't really the thing the
+  // coordinator is thinking of as "the placement's agency."
+  const stillOverlaps = _plActiveAgencyKeys.some(a => _plSelectedAgencies.includes(a));
+  if(stillOverlaps){
+    document.getElementById('plCard').style.display = 'none';
+    document.getElementById('plRosterContent').style.display = '';
+    plSetActionButtonsDisabled(false);
+    return;
+  }
+  if(!plHasExistingRoster()) return;
+
+  document.getElementById('plRosterContent').style.display = 'none';
+  document.getElementById('plCard').style.display = '';
+  plSetActionButtonsDisabled(true);
+  plRebuildCard();
+}
+
+function plSummarizeAgencies(keys){
+  const names = keys.map(k => PL_AGENCY_SCENARIOS[k]?.name || k);
+  if(!names.length) return '—';
+  return names.length === 1 ? names[0] : `${names[0]} (+${names.length - 1} other${names.length > 2 ? 's' : ''})`;
+}
+
+function plRebuildCard(){
+  const names = _plSelectedAgencies;
+  const missing = names.filter(n => {
+    const sc = PL_AGENCY_SCENARIOS[n];
+    return !sc || Object.keys(sc.shifts || {}).length === 0;
+  });
+  const allMissing = missing.length === names.length;
+
+  const diverged = plIsDiverged();
+  const desc = document.getElementById('plCardDesc');
+  const ftr = document.getElementById('plCardFtr');
+  desc.textContent = diverged
+    ? 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from.'
+    : 'Changing the agency means the current roster may no longer apply.';
+
+  // Current = the placement's stored agency assignment (the record of
+  // fact); New = whatever's currently checked in the multi-select. Shown
+  // as its own pair, same convention as the Process Request card, rather
+  // than folded into prose.
+  document.getElementById('plCardCurrentAgency').textContent = plSummarizeAgencies(_plCurrentAgencies);
+  document.getElementById('plCardNewAgency').textContent = plSummarizeAgencies(names);
+
+  // 2-vs-3-button split is unaffected by how many agencies are involved —
+  // it only depends on whether the placement's roster has diverged from
+  // the request's, per Felix's Aug 18/21 confirmation. Disabled only
+  // when every selected agency lacks shifts — with N agencies, one
+  // usable agency is enough to proceed (§ Felix, on 1:N Configure Shifts
+  // being optional).
+  if(!diverged){
+    ftr.innerHTML = `
+      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
+      <button class="rna-card-btn" id="plBtnRegen" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('new-agency')">Regenerate</button>`;
+  } else {
+    ftr.innerHTML = `
+      <button class="rna-card-link" onclick="plChooseManual()">Manual</button>
+      <button class="rna-card-btn secondary" id="plBtnRegenReq" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('request')">Regenerate from Request</button>
+      <button class="rna-card-btn" id="plBtnRegenPlc" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('new-agency')">Regenerate from New Agency</button>`;
+  }
+
+  plCloseCfgPanel();
+  if(missing.length){
+    const box = document.createElement('div');
+    box.id = 'plCfgBox';
+    box.className = 'pl-cfg-inline';
+    box.innerHTML = plRenderCfgBox(names, missing);
+    ftr.insertAdjacentElement('beforebegin', box);
+  }
+}
+
+// ── Configure Shifts — radio + single shared button, matching the
+// reviewed doc pattern: selecting an agency here only changes which one
+// gets configured, never the regenerate pool itself. ──────────────────
+function plRenderCfgBox(names, missing){
+  if(!_plCfgRadioTarget || !missing.includes(_plCfgRadioTarget)) _plCfgRadioTarget = missing[0];
+  // lib-network-select + [subset] — the same mechanism already used to
+  // scope an agency field to a specific id list elsewhere in this exact
+  // schedule/pattern component family (calendar-pattern.component.html,
+  // roster.component.html, edit-pattern.component.html), rather than an
+  // unrelated pattern imported from a different feature area.
+  const options = missing.map(n =>
+    `<option value="${n}" ${n===_plCfgRadioTarget?'selected':''}>${PL_AGENCY_SCENARIOS[n]?.name || n}</option>`
+  ).join('');
+  return `
+    <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px;">Shifts need to be configured</div>
+    <div style="font-size:11px;color:#374151;margin-bottom:8px;">${missing.length} of ${names.length} selected agencies don't have shifts configured for this discipline.</div>
+    <label class="field-label" style="font-size:10px;">Configure shifts for</label>
+    <select class="field-select" style="height:32px;font-size:12px;margin-bottom:8px;" onchange="_plCfgRadioTarget=this.value">${options}</select>
+    <div>
+      <button class="rna-card-btn secondary" style="height:28px;padding:0 12px;font-size:11px;" onclick="plOpenCfgShifts()">Configure shifts</button>
+    </div>
+    <div id="plCfgAddForm" style="display:none;margin-top:10px;"></div>`;
+}
+
+function plOpenCfgShifts(){
+  const target = _plCfgRadioTarget;
+  const box = document.getElementById('plCfgAddForm');
+  box.style.display = '';
+  box.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">Add a shift for ${PL_AGENCY_SCENARIOS[target]?.name || target}</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+      <div><label style="font-size:10px;color:#555;display:block;">Name</label>
+        <input type="text" id="plCfgName" value="AM" style="height:28px;border:1px solid #c7d9f0;border-radius:4px;padding:0 6px;font-size:11px;width:70px;"></div>
+      <div><label style="font-size:10px;color:#555;display:block;">Start</label>
+        <input type="text" id="plCfgStart" value="06:30" style="height:28px;border:1px solid #c7d9f0;border-radius:4px;padding:0 6px;font-size:11px;width:65px;"></div>
+      <div><label style="font-size:10px;color:#555;display:block;">End</label>
+        <input type="text" id="plCfgEnd" value="15:30" style="height:28px;border:1px solid #c7d9f0;border-radius:4px;padding:0 6px;font-size:11px;width:65px;"></div>
+      <button class="rna-card-btn" style="height:28px;padding:0 10px;font-size:11px;" onclick="plSaveCfgShift()">Save</button>
+    </div>`;
+}
+
+function plSaveCfgShift(){
+  const target = _plCfgRadioTarget;
+  const name = document.getElementById('plCfgName').value.trim() || 'AM';
+  const start = document.getElementById('plCfgStart').value.trim() || '06:30';
+  const end = document.getElementById('plCfgEnd').value.trim() || '15:30';
+  const sc = PL_AGENCY_SCENARIOS[target];
+  if(sc){
+    if(!Object.keys(sc.shifts || {}).length){
+      sc.shifts = { Mon:{shift:name,start,end}, Wed:{shift:name,start,end}, Fri:{shift:name,start,end} };
+    } else {
+      Object.keys(sc.shifts).forEach(d => { if(!sc.shifts[d]) sc.shifts[d] = {shift:name,start,end}; });
+    }
+  }
+  plToast('Shift added', `${name} (${start}–${end}) is now available on ${sc ? sc.name : target}.`);
+  plRebuildCard(); // refresh missing-list / disabled state in place
+}
+
+function plCloseCfgPanel(){
+  const box = document.getElementById('plCfgBox');
+  if(box) box.remove();
+}
+
+function plCloseCard(){
+  document.getElementById('plCard').style.display = 'none';
+  document.getElementById('plRosterContent').style.display = '';
+  plSetActionButtonsDisabled(false);
+  plCloseCfgPanel();
+}
+
+function plChooseManual(){
+  plCloseCard();
+  _plCurrentAgencies = [..._plSelectedAgencies];
+  _plActiveAgencyKeys = []; // manual roster — nothing is auto-matched, so nothing counts as "still active"
+  document.getElementById('plBanners').innerHTML = '';
+  document.getElementById('plWeeks').innerHTML = `
+    <div style="font-size:12px;color:#9ca3af;font-style:italic;padding:16px 0;text-align:center;border:1px dashed #e2e5ea;border-radius:6px;">
+      No standard days — define the roster manually below.
+    </div>`;
+  plToast('Roster cleared', 'The old roster no longer applies to the new agency selection — define it manually.');
+}
+
+// ── Multi-agency matching — same algorithm proven on Process Request:
+// per requested day, search every selected agency's candidate and pick
+// whichever is closest to the anchor (the chosen source roster's
+// recorded time); within 4 hours wins outright, otherwise closest still
+// populates but flags "differs"; no candidate anywhere = no match. ────
+function _plTimeToMin(t){ const [h,m] = (t||'0:00').split(':').map(Number); return h*60 + (m||0); }
+function _plDiffHrs(t1,t2){ return Math.abs(_plTimeToMin(t1) - _plTimeToMin(t2)) / 60; }
+
+function plComputeMultiAgencyMatch(names, sourceRoster){
+  const days = sourceRoster.days;
+  const anchorStart = sourceRoster.start;
+  const shiftsByDay = {};
+  days.forEach(day => {
+    let candidates = [];
+    names.forEach((n, idx) => {
+      const sc = PL_AGENCY_SCENARIOS[n];
+      const cand = sc && sc.shifts ? sc.shifts[day] : null;
+      if(cand) candidates.push({ ...cand, agencyKey: n, agencyName: sc.name, listPos: idx, diff: _plDiffHrs(cand.start, anchorStart) });
+    });
+    if(!candidates.length){ shiftsByDay[day] = null; return; }
+    candidates.sort((a,b) => a.diff - b.diff || a.listPos - b.listPos);
+    const best = candidates[0];
+    shiftsByDay[day] = { shift: best.shift, start: best.start, end: best.end, agencyKey: best.agencyKey, agencyName: best.agencyName, flag: best.diff > 4 ? 'differs' : undefined };
+  });
+  const missingAgencies = names.filter(n => {
+    const sc = PL_AGENCY_SCENARIOS[n];
+    return !sc || Object.keys(sc.shifts || {}).length === 0;
+  });
+  return { shiftsByDay, missingAgencies };
+}
+
+// Which agencies are ACTUALLY providing at least one day in the
+// currently-rendered roster — not just nominally "current". An agency
+// can be in _plCurrentAgencies without ever winning a single day (e.g.
+// it always loses the closest-match tie-break), so checking against
+// this instead of the nominal list is what makes "is the source of the
+// visible roster still selected" mean what it says.
+let _plActiveAgencyKeys = [];
+function _plDeriveActiveKeys(shiftsByDay){
+  return [...new Set(Object.values(shiftsByDay).filter(Boolean).map(s => s.agencyKey))];
+}
+
+function plChooseRegenerateMulti(source){
+  const names = _plSelectedAgencies;
+  const sourceRoster = source === 'request' ? REQUEST_ROSTER : PLACEMENT_ROSTER;
+  const { shiftsByDay } = plComputeMultiAgencyMatch(names, sourceRoster);
+  plCloseCard();
+  plRenderRosterMulti(sourceRoster, shiftsByDay);
+  _plCurrentAgencies = [...names]; // this selection is now the placement's current state
+  _plActiveAgencyKeys = _plDeriveActiveKeys(shiftsByDay);
+  const sourceLabel = source === 'request' ? 'request\'s' : 'new agency selection\'s';
+  plToast('Roster regenerated', `Matched each day against the closest of ${names.length} selected agenc${names.length > 1 ? 'ies' : 'y'}, from the ${sourceLabel} pattern.`);
+}
+
+// Renders per-day results where each day carries its OWN resolved
+// agency — unlike the original single-scenario renderer, a multi-agency
+// regenerate can legitimately show a different agency on different days.
+function plRenderRosterMulti(sourceRoster, shiftsByDay){
+  const BASE_DATE = new Date(2026, 0, 12); // Mon 12 Jan 2026
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let weeksHtml = '';
+  for(let w=0; w<3; w++){
+    let rows = '';
+    DAYS.forEach(day=>{
+      const offset = w*7 + DAYS.indexOf(day);
+      const d = new Date(BASE_DATE); d.setDate(d.getDate()+offset);
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dateStr = `${day}, ${dd}/${mm}`;
+      const wasRequested = sourceRoster.days.includes(day);
+      const shiftData = wasRequested ? shiftsByDay[day] : null;
+      if(shiftData){
+        const flagged = shiftData.flag === 'differs';
+        const flagIcon = flagged ? ` <span style="color:#c62828;font-weight:700;" title="Hours differ from requested">&#33;</span>` : '';
+        rows += `<tr${flagged?' class="ae-roster-day-mismatch"':''}>
+          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
+          <td style="font-size:11px;padding:5px 6px;color:#003179;">${shiftData.agencyName}</td>
+          <td style="font-size:11px;padding:5px 6px;">${shiftData.shift}</td>
+          <td style="font-size:11px;padding:5px 6px;">${shiftData.start}</td>
+          <td style="font-size:11px;padding:5px 6px;">${shiftData.end}</td>
+          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a>${flagIcon}</td></tr>`;
+      } else if(wasRequested){
+        rows += `<tr class="ae-roster-day-mismatch">
+          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
+          <td colspan="4" style="font-size:11px;padding:5px 6px;color:#92400e;">No matching shift found</td>
+          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a></td></tr>`;
+      } else {
+        rows += `<tr>
+          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
+          <td colspan="4" style="padding:5px 6px;"><span class="ae-notscheduled">Not Scheduled</span></td>
+          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a></td></tr>`;
+      }
+    });
+    weeksHtml += `<div style="font-size:11px;font-weight:700;color:#003179;padding:8px 0 4px;">Week ${w+1}</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+        <thead><tr style="background:#f5f7ff;">
+          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Day</th>
+          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Agency</th>
+          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Shift</th>
+          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Start</th>
+          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">End</th>
+          <th style="border-bottom:1px solid #e8e8e8;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+  document.getElementById('plBanners').innerHTML =
+    `<span class="ae-banner-pill">Roster starts 12/01 ⚠</span><span class="ae-banner-pill">Roster ends 01/02 ⚠</span>`;
+  document.getElementById('plWeeks').innerHTML = weeksHtml;
+}
+
+function plToast(title, body){
+  const t = document.getElementById('plToast');
+  document.getElementById('plToastTitle').textContent = title;
+  document.getElementById('plToastBody').textContent = body;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 3500);
+}
+
+// Initial state on page load: the placement already spans TWO agencies
+// (Agency C + Agency D) — a real N-agency starting point, matching what
+// this file is now built to demonstrate. The initial roster view is
+// computed the same way a regenerate would be, anchored against the
+// placement's own roster.
+plUpdateAgencyDisplay();
+{
+  const { shiftsByDay } = plComputeMultiAgencyMatch(_plCurrentAgencies, PLACEMENT_ROSTER);
+  plRenderRosterMulti(PLACEMENT_ROSTER, shiftsByDay);
+  _plActiveAgencyKeys = _plDeriveActiveKeys(shiftsByDay);
+}
+</script>
+</body>
+</html>
