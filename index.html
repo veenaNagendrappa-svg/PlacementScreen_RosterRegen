@@ -64,6 +64,17 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 .rna-card-btn:disabled:hover{background:#8a94a3;}
 .rna-card-btn.secondary:disabled{background:white;border-color:#c3c9d1;color:#9ca3af;cursor:not-allowed;}
 .rna-card-btn.secondary:disabled:hover{background:white;}
+.pl-info-wrap{position:relative;display:inline-flex;align-items:center;cursor:help;color:#003179;margin-left:4px;}
+.pl-info-popover{
+  display:none;position:absolute;top:100%;left:0;margin-top:6px;z-index:30;
+  background:white;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.15);
+  padding:8px 10px;width:auto;white-space:nowrap;
+}
+.pl-info-wrap:hover .pl-info-popover{display:block;}
+.pl-info-popover table{border-collapse:collapse;font-size:11px;}
+.pl-info-popover th{padding:2px 8px;color:#888;font-weight:600;text-align:center;}
+.pl-info-popover td{padding:2px 8px;text-align:center;color:#374151;}
+.pl-info-popover .pl-more{font-size:10px;color:#6b7280;margin-top:4px;text-align:left;}
 
 
 /* Multi-select agency field — same pattern as the Process Request prototype */
@@ -104,8 +115,16 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 <body>
 
 <div class="page-header">
-  <div class="page-title">103378 — SAA-C — Jan-15</div>
+  <div class="page-title" id="pageTitlePl">103378 — SAA-C — Jan-15</div>
   <div class="page-subtitle">ACU · Nursing · General Medical</div>
+</div>
+
+<div style="padding:10px 24px;background:#f0f9ff;border-bottom:1px solid #bae6fd;font-size:12px;">
+  <label style="font-weight:600;color:#0c4a6e;margin-right:8px;">Demo placement:</label>
+  <select id="plPlacementSwitch" onchange="plSwitchPlacement(this.value)" style="height:28px;font-size:12px;border:1px solid #bae6fd;border-radius:4px;padding:0 8px;">
+    <option value="p1">103378 — starts on 2 agencies (demos N:1 / N:N)</option>
+    <option value="p2">104512 — starts on 1 agency (demos 1:1 / 1:N)</option>
+  </select>
 </div>
 
 <div class="page-body">
@@ -162,7 +181,7 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
     <div class="col-md-6">
       <label class="field-label">Agency <span class="req">*</span></label>
       <div id="plAgencyHint" style="font-size:10.5px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:5px 8px;margin-bottom:5px;line-height:1.4;">
-        💡 Try: uncheck the current agencies and select <strong>Agency E</strong> to see Configure Shifts (Agency E has no shifts). Add <strong>Agency F</strong> alongside it to see N:N with one agency needing configuration.
+        💡
       </div>
       <div class="ms-wrap" id="plAgencyDd">
         <div class="ms-display" id="plAgencyDisplay" onclick="plAgencyDdToggle()">
@@ -213,16 +232,14 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   <div class="rna-card" id="plCard" style="display:none;">
     <div class="rna-card-title">Roster needs attention</div>
     <div class="rna-card-desc" id="plCardDesc"></div>
-    <div style="display:flex;gap:24px;margin:10px 0;">
-      <div style="flex:1;">
-        <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">Current agency</div>
-        <div id="plCardCurrentAgency" style="font-size:13px;color:#374151;padding-bottom:6px;border-bottom:1px solid #d7e2f0;"></div>
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:2px;">New agency</div>
-        <div id="plCardNewAgency" style="font-size:13px;color:#374151;padding-bottom:6px;border-bottom:1px solid #d7e2f0;"></div>
+    <div id="plFromToHeader" style="display:none;">
+      <div style="font-size:10px;color:#6b7280;font-weight:600;margin:10px 0 4px;">From → To</div>
+      <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:6px;line-height:1.4;">
+        ⓘ Configure Shifts here is a mock-up only — not a proposed design for the real screen.
       </div>
     </div>
+    <div id="plFromToRows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
+    <div id="plCfgAddForm" style="display:none;margin-bottom:10px;"></div>
     <div class="rna-card-ftr" id="plCardFtr"></div>
   </div>
 
@@ -292,13 +309,77 @@ function plIsDiverged(){
   if(a.length !== b.length) return true;
   return !a.every((d,i) => d === b[i]);
 }
-// The placement's CURRENT agency state — deliberately seeded with TWO
-// agencies already on it, since a Placement (unlike a Request) can
-// genuinely span several agencies at once. This is what makes N:1 and
-// N:N real starting points here, not just 1:1/1:N.
-let _plCurrentAgencies = ['agencyc','agencyd'];
+
+// Info icon + hover popover showing the Request's original roster —
+// otherwise invisible once the placement has drifted (nothing else on
+// screen shows it once Request is picked as source). Static "+N more
+// weeks" like the real hover panel, no expand.
+function plRenderRequestRosterInfoIcon(){
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weeksToShow = 2, moreWeeks = 1;
+  let rows = '';
+  for(let w=1; w<=weeksToShow; w++){
+    rows += `<tr><td style="text-align:left;font-weight:600;color:#6b7280;">Wk ${w}</td>` +
+      DAYS.map(d => `<td>${REQUEST_ROSTER.days.includes(d) ? REQUEST_ROSTER.shift : '–'}</td>`).join('') +
+      `</tr>`;
+  }
+  return `<span class="pl-info-wrap">ⓘ<div class="pl-info-popover">
+      <table><thead><tr><th></th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="pl-more">+${moreWeeks} more week${moreWeeks>1?'s':''}</div>
+    </div></span>`;
+}
+
+// Two demo placements, so every scenario is reachable in one step
+// without disturbing the other's setup:
+//   p1 — starts on TWO agencies (C, D) — demos N:1 and N:N
+//   p2 — starts on ONE agency (C only) — demos 1:1 (pick 1 new agency)
+//        and 1:N (pick 2+ new agencies)
+const PLACEMENTS = {
+  p1: {
+    title: '103378 — SAA-C — Jan-15',
+    currentAgencies: ['agencyc','agencyd'],
+    hint: 'Try: uncheck Agency C and Agency D, then select just <strong>Agency F</strong> to see N:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see N:N — Agency E has no shifts, so one row will need Configure Shifts.',
+    roster: {
+      Mon: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Mon, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
+      Wed: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Wed, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
+      Fri: { ...PL_AGENCY_SCENARIOS.agencyd.shifts.Fri, agencyKey:'agencyd', agencyName: PL_AGENCY_SCENARIOS.agencyd.name }
+    }
+  },
+  p2: {
+    title: '104512 — SAA-C — Jan-15',
+    currentAgencies: ['agencyc'],
+    hint: 'Try: uncheck Agency C, then select just <strong>Agency F</strong> to see 1:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see 1:N — Agency E has no shifts, so the row will need Configure Shifts.',
+    roster: {
+      Mon: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Mon, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
+      Wed: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Wed, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
+      Fri: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Fri, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name }
+    }
+  }
+};
+
+// The placement's CURRENT agency state — which of PLACEMENTS is loaded
+// right now. p1 (two agencies) is the default, matching what this file
+// was originally built to demonstrate.
+let _plCurrentAgencies = [...PLACEMENTS.p1.currentAgencies];
 let _plSelectedAgencies = [..._plCurrentAgencies];
 let _plCfgRadioTarget = null;
+// Per-day ownership of the CURRENT roster — day -> {agencyKey,...} or null.
+// This is what a From/To row's mapping actually reassigns: every day
+// that agencyKey X currently owns moves to whichever agency X's row
+// points to, once Regenerate runs. Seeded at page load, replaced after
+// every successful regenerate/manual reset.
+let _plCurrentRosterByDay = {};
+// oldAgencyKey -> chosenNewAgencyKey — the explicit per-row mapping.
+// Reset whenever the From set changes (a fresh disruption); preserved
+// across incidental edits within the same disruption (e.g. toggling an
+// unrelated agency in the multi-select shouldn't discard a choice
+// already made).
+let _plFromToMap = {};
+// Which source the coordinator picked for THIS disruption — null means
+// "not yet chosen" (step 1 of 2). Reset whenever a fresh disruption
+// starts, so every new agency change asks again.
+let _plChosenSource = null;
 
 function plHasExistingRoster(){
   const weeks = document.getElementById('plWeeks');
@@ -332,7 +413,11 @@ function plAgencyToggle(cb){
   if(checked && idx < 0) _plSelectedAgencies.push(key);
   if(!checked && idx >= 0) _plSelectedAgencies.splice(idx, 1);
   plUpdateAgencyDisplay();
-  plOnSelectionChanged();
+  // Deliberately NOT calling plOnSelectionChanged() here. Row defaults
+  // are only evaluated once the dropdown closes (below) — evaluating on
+  // every individual checkbox click would let a default lock onto
+  // whatever's checked at that exact instant (e.g. only one candidate,
+  // mid-selection), before the coordinator has finished picking.
 }
 function plUpdateAgencyDisplay(){
   const el = document.getElementById('plAgencyDisplayVal');
@@ -344,8 +429,10 @@ function plUpdateAgencyDisplay(){
 document.addEventListener('click', function(e){
   const wrap = document.getElementById('plAgencyDd');
   if(wrap && !wrap.contains(e.target)){
+    const wasOpen = document.getElementById('plAgencyDdList').classList.contains('open');
     document.getElementById('plAgencyDdList').classList.remove('open');
     document.getElementById('plAgencyDisplay').classList.remove('open');
+    if(wasOpen) plOnSelectionChanged(); // evaluate once, against the final settled selection
   }
 });
 
@@ -384,80 +471,144 @@ function plSummarizeAgencies(keys){
   return names.length === 1 ? names[0] : `${names[0]} (+${names.length - 1} other${names.length > 2 ? 's' : ''})`;
 }
 
-function plRebuildCard(){
-  const names = _plSelectedAgencies;
-  const missing = names.filter(n => {
-    const sc = PL_AGENCY_SCENARIOS[n];
-    return !sc || Object.keys(sc.shifts || {}).length === 0;
-  });
-  const allMissing = missing.length === names.length;
+function _plHasShifts(key){
+  const sc = PL_AGENCY_SCENARIOS[key];
+  return !!(sc && sc.shifts && Object.keys(sc.shifts).length);
+}
+function _plAgencyName(key){
+  return PL_AGENCY_SCENARIOS[key]?.name || key;
+}
 
+// Default "To" for a From row: alphabetically-first candidate (among
+// the currently-selected agencies) that actually has shifts configured.
+// If none of them do, falls back to alphabetically-first overall — a
+// row always has *some* default, even a bad one, so the coordinator is
+// never staring at an empty dropdown.
+function plDefaultToFor(){
+  const candidates = [..._plSelectedAgencies].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
+  return candidates.find(k => _plHasShifts(k)) || candidates[0];
+}
+
+function plFromToChanged(oldKey, newVal){
+  _plFromToMap[oldKey] = newVal;
+  plRebuildCard(); // refresh this row's warning + the overall disabled state
+}
+
+function plRebuildCard(){
   const diverged = plIsDiverged();
   const desc = document.getElementById('plCardDesc');
   const ftr = document.getElementById('plCardFtr');
-  desc.textContent = diverged
-    ? 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from.'
-    : 'Changing the agency means the current roster may no longer apply.';
+  const fthHeader = document.getElementById('plFromToHeader');
 
-  // Current = the placement's stored agency assignment (the record of
-  // fact); New = whatever's currently checked in the multi-select. Shown
-  // as its own pair, same convention as the Process Request card, rather
-  // than folded into prose.
-  document.getElementById('plCardCurrentAgency').textContent = plSummarizeAgencies(_plCurrentAgencies);
-  document.getElementById('plCardNewAgency').textContent = plSummarizeAgencies(names);
-
-  // 2-vs-3-button split is unaffected by how many agencies are involved —
-  // it only depends on whether the placement's roster has diverged from
-  // the request's, per Felix's Aug 18/21 confirmation. Disabled only
-  // when every selected agency lacks shifts — with N agencies, one
-  // usable agency is enough to proceed (§ Felix, on 1:N Configure Shifts
-  // being optional).
-  if(!diverged){
+  // STEP 1 — pick a source first. Only relevant when diverged: if the
+  // placement and request rosters already match, there's only one
+  // possible source, so this step is skipped entirely. The mapping
+  // itself can't be built correctly until the source is known — "From"
+  // means something different depending on which roster you're asking.
+  if(diverged && !_plChosenSource){
+    desc.textContent = 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from before mapping agencies.';
+    fthHeader.style.display = 'none'; // no From/To or Configure Shifts disclaimer until a source is actually picked
+    document.getElementById('plFromToRows').innerHTML = '';
+    // Right-aligned sequence, matching the real Default Pattern
+    // Available card: secondary button, primary button, tertiary link
+    // last — not the link off on its own side.
     ftr.innerHTML = `
-      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
-      <button class="rna-card-btn" id="plBtnRegen" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('new-agency')">Regenerate</button>`;
+      <button class="rna-card-btn secondary" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('request')">
+        <div style="font-weight:700;font-size:12px;">Request's original roster</div>
+        <div style="font-weight:400;font-size:10px;opacity:.8;">What was originally asked for</div>
+      </button>
+      <button class="rna-card-btn" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('new-agency')">
+        <div style="font-weight:700;font-size:12px;">Placement's current roster</div>
+        <div style="font-weight:400;font-size:10px;opacity:.9;">What's actually scheduled right now</div>
+      </button>
+      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>`;
+    plCloseCfgPanel();
+    return;
+  }
+  fthHeader.style.display = ''; // back on now that a source is chosen (or there was never a choice to make)
+
+  const source = _plChosenSource || 'new-agency'; // matched case has no real choice — placement basis
+  const names = _plSelectedAgencies;
+  if(diverged){
+    const label = source === 'request' ? 'request\'s original' : 'placement\'s current';
+    const infoIcon = source === 'request' ? plRenderRequestRosterInfoIcon() : '';
+    desc.innerHTML = `Mapping from the ${label} roster.${infoIcon}`;
   } else {
-    ftr.innerHTML = `
-      <button class="rna-card-link" onclick="plChooseManual()">Manual</button>
-      <button class="rna-card-btn secondary" id="plBtnRegenReq" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('request')">Regenerate from Request</button>
-      <button class="rna-card-btn" id="plBtnRegenPlc" ${allMissing?'disabled':''} onclick="plChooseRegenerateMulti('new-agency')">Regenerate from New Agency</button>`;
+    desc.textContent = 'Changing the agency means the current roster may no longer apply.';
   }
 
+  // One row per FROM agency (whichever agencies currently own at least
+  // one day) — not a collapsed "+N others" summary. Each row keeps or
+  // re-defaults its own mapping; an existing choice is preserved as
+  // long as its target is still among the selected agencies.
+  //
+  // NOTE — known simplification, flagged deliberately: the From rows
+  // here are always the placement's currently-active agencies, even
+  // when source === 'request'. A Request can only ever have exactly
+  // one agency (0..1, never a join table), so a genuine Request-basis
+  // regenerate should show exactly ONE row — the request's own single
+  // original agency — not the placement's current multi-agency state.
+  // That's a real, separate follow-up (showing the request's own
+  // roster, since it's otherwise invisible once the placement has
+  // drifted) — not solved by this sequencing change alone.
+  const fromKeys = [..._plActiveAgencyKeys].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
+  let anyRowMissing = false;
+  const rowsHtml = fromKeys.map(oldKey => {
+    // Sticky once set — recompute only if this row genuinely has no
+    // mapping yet, or its current target is no longer among the
+    // selected agencies. Never recompute just because a "better"
+    // alphabetical option became available elsewhere (e.g. Configure
+    // Shifts on a different row) — with a dozen rows already sensibly
+    // mapped, nothing should cascade-change just because row #12 got
+    // its shifts configured.
+    const isValid = _plFromToMap[oldKey] && names.includes(_plFromToMap[oldKey]);
+    if(!isValid){
+      _plFromToMap[oldKey] = plDefaultToFor();
+    }
+    const toKey = _plFromToMap[oldKey];
+    const missing = !_plHasShifts(toKey);
+    if(missing) anyRowMissing = true;
+    const options = [...names].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)))
+      .map(k => `<option value="${k}" ${k===toKey?'selected':''}>${_plAgencyName(k)}${_plHasShifts(k)?'':' (no shifts)'}</option>`)
+      .join('');
+    return `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="width:140px;font-size:12px;color:#374151;flex-shrink:0;">${_plAgencyName(oldKey)}</div>
+        <div style="color:#9ca3af;">→</div>
+        <select class="field-select" style="height:30px;font-size:12px;width:auto;min-width:180px;" onchange="plFromToChanged('${oldKey}', this.value)">${options}</select>
+        ${missing ? `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#92400e;">
+            <span title="No shifts configured for this discipline">⚠</span>
+            <a href="javascript:;" onclick="plOpenCfgShiftsForRow('${oldKey}')" style="color:#003179;font-weight:600;text-decoration:underline;">Configure shifts</a>
+          </span>` : ''}
+      </div>`;
+  }).join('');
+  document.getElementById('plFromToRows').innerHTML = rowsHtml;
+
+  // Strict per-row check — every row is its own independent 1:1
+  // mapping now, so there's no "at least one usable" exception the way
+  // the old competitive-matching model had. If any row's chosen target
+  // lacks shifts, Regenerate is disabled until that row is resolved
+  // (pick a different target, or configure shifts for this one).
+  const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate from New Agency';
+  ftr.innerHTML = `
+    ${diverged ? `<button class="rna-card-btn secondary" onclick="plChangeSource()">Change source</button>` : ''}
+    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">${diverged ? regenLabel : 'Regenerate'}</button>
+    <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>`;
   plCloseCfgPanel();
-  if(missing.length){
-    const box = document.createElement('div');
-    box.id = 'plCfgBox';
-    box.className = 'pl-cfg-inline';
-    box.innerHTML = plRenderCfgBox(names, missing);
-    ftr.insertAdjacentElement('beforebegin', box);
-  }
 }
 
-// ── Configure Shifts — radio + single shared button, matching the
-// reviewed doc pattern: selecting an agency here only changes which one
-// gets configured, never the regenerate pool itself. ──────────────────
-function plRenderCfgBox(names, missing){
-  if(!_plCfgRadioTarget || !missing.includes(_plCfgRadioTarget)) _plCfgRadioTarget = missing[0];
-  // lib-network-select + [subset] — the same mechanism already used to
-  // scope an agency field to a specific id list elsewhere in this exact
-  // schedule/pattern component family (calendar-pattern.component.html,
-  // roster.component.html, edit-pattern.component.html), rather than an
-  // unrelated pattern imported from a different feature area.
-  const options = missing.map(n =>
-    `<option value="${n}" ${n===_plCfgRadioTarget?'selected':''}>${PL_AGENCY_SCENARIOS[n]?.name || n}</option>`
-  ).join('');
-  return `
-    <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px;">Shifts need to be configured</div>
-    <div style="font-size:11px;color:#374151;margin-bottom:8px;">${missing.length} of ${names.length} selected agencies don't have shifts configured for this discipline.</div>
-    <label class="field-label" style="font-size:10px;">Configure shifts for</label>
-    <select class="field-select" style="height:32px;font-size:12px;margin-bottom:8px;" onchange="_plCfgRadioTarget=this.value">${options}</select>
-    <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:8px;line-height:1.4;">
-      ⓘ Mock-up only — not a proposed design for the real Configure Shifts screen.
-    </div>
-    <div>
-      <button class="rna-card-btn secondary" style="height:28px;padding:0 12px;font-size:11px;" onclick="plOpenCfgShifts()">Configure shifts</button>
-    </div>
-    <div id="plCfgAddForm" style="display:none;margin-top:10px;"></div>`;
+function plChooseSource(source){
+  _plChosenSource = source;
+  plRebuildCard();
+}
+function plChangeSource(){
+  _plChosenSource = null;
+  plRebuildCard();
+}
+
+function plOpenCfgShiftsForRow(oldKey){
+  _plCfgRadioTarget = _plFromToMap[oldKey];
+  plOpenCfgShifts();
 }
 
 function plOpenCfgShifts(){
@@ -498,8 +649,8 @@ function plSaveCfgShift(){
 }
 
 function plCloseCfgPanel(){
-  const box = document.getElementById('plCfgBox');
-  if(box) box.remove();
+  const form = document.getElementById('plCfgAddForm');
+  if(form){ form.style.display = 'none'; form.innerHTML = ''; }
 }
 
 function plCloseCard(){
@@ -513,6 +664,9 @@ function plChooseManual(){
   plCloseCard();
   _plCurrentAgencies = [..._plSelectedAgencies];
   _plActiveAgencyKeys = []; // manual roster — nothing is auto-matched, so nothing counts as "still active"
+  _plCurrentRosterByDay = {};
+  _plFromToMap = {};
+  _plChosenSource = null;
   document.getElementById('plBanners').innerHTML = '';
   document.getElementById('plWeeks').innerHTML = `
     <div style="font-size:12px;color:#9ca3af;font-style:italic;padding:16px 0;text-align:center;border:1px dashed #e2e5ea;border-radius:6px;">
@@ -521,58 +675,53 @@ function plChooseManual(){
   plToast('Roster cleared', 'The old roster no longer applies to the new agency selection — define it manually.');
 }
 
-// ── Multi-agency matching — same algorithm proven on Process Request:
-// per requested day, search every selected agency's candidate and pick
-// whichever is closest to the anchor (the chosen source roster's
-// recorded time); within 4 hours wins outright, otherwise closest still
-// populates but flags "differs"; no candidate anywhere = no match. ────
 function _plTimeToMin(t){ const [h,m] = (t||'0:00').split(':').map(Number); return h*60 + (m||0); }
 function _plDiffHrs(t1,t2){ return Math.abs(_plTimeToMin(t1) - _plTimeToMin(t2)) / 60; }
 
-function plComputeMultiAgencyMatch(names, sourceRoster){
-  const days = sourceRoster.days;
-  const anchorStart = sourceRoster.start;
-  const shiftsByDay = {};
-  days.forEach(day => {
-    let candidates = [];
-    names.forEach((n, idx) => {
-      const sc = PL_AGENCY_SCENARIOS[n];
-      const cand = sc && sc.shifts ? sc.shifts[day] : null;
-      if(cand) candidates.push({ ...cand, agencyKey: n, agencyName: sc.name, listPos: idx, diff: _plDiffHrs(cand.start, anchorStart) });
-    });
-    if(!candidates.length){ shiftsByDay[day] = null; return; }
-    candidates.sort((a,b) => a.diff - b.diff || a.listPos - b.listPos);
-    const best = candidates[0];
-    shiftsByDay[day] = { shift: best.shift, start: best.start, end: best.end, agencyKey: best.agencyKey, agencyName: best.agencyName, flag: best.diff > 4 ? 'differs' : undefined };
-  });
-  const missingAgencies = names.filter(n => {
-    const sc = PL_AGENCY_SCENARIOS[n];
-    return !sc || Object.keys(sc.shifts || {}).length === 0;
-  });
-  return { shiftsByDay, missingAgencies };
-}
-
 // Which agencies are ACTUALLY providing at least one day in the
-// currently-rendered roster — not just nominally "current". An agency
-// can be in _plCurrentAgencies without ever winning a single day (e.g.
-// it always loses the closest-match tie-break), so checking against
-// this instead of the nominal list is what makes "is the source of the
-// visible roster still selected" mean what it says.
+// currently-rendered roster — not just nominally "current". These are
+// the FROM rows: every agency that owns at least one day gets its own
+// row and its own To mapping, rather than being folded into a single
+// collapsed summary.
 let _plActiveAgencyKeys = [];
 function _plDeriveActiveKeys(shiftsByDay){
   return [...new Set(Object.values(shiftsByDay).filter(Boolean).map(s => s.agencyKey))];
 }
 
+// The real regenerate, once a From/To mapping exists: every day that
+// belonged to a given old agency gets reassigned wholesale to whichever
+// new agency that old agency's row was mapped to — no competition
+// between new agencies for the same day, because the coordinator (or
+// the default) already decided that at the old-agency level, not the
+// day level. Still applies the same 4-hour window for whichever single
+// pairing is now in play for that day.
+function plComputeRowBasedMatch(sourceRoster){
+  const shiftsByDay = {};
+  sourceRoster.days.forEach(day => {
+    const owner = _plCurrentRosterByDay[day];
+    if(!owner || !owner.agencyKey){ shiftsByDay[day] = null; return; } // day has no current owner — nothing to reassign
+    const toKey = _plFromToMap[owner.agencyKey];
+    const sc = toKey ? PL_AGENCY_SCENARIOS[toKey] : null;
+    const cand = sc && sc.shifts ? sc.shifts[day] : null;
+    if(!cand){ shiftsByDay[day] = null; return; }
+    const diff = _plDiffHrs(cand.start, sourceRoster.start);
+    shiftsByDay[day] = { shift: cand.shift, start: cand.start, end: cand.end, agencyKey: toKey, agencyName: sc.name, flag: diff > 4 ? 'differs' : undefined };
+  });
+  return shiftsByDay;
+}
+
 function plChooseRegenerateMulti(source){
-  const names = _plSelectedAgencies;
   const sourceRoster = source === 'request' ? REQUEST_ROSTER : PLACEMENT_ROSTER;
-  const { shiftsByDay } = plComputeMultiAgencyMatch(names, sourceRoster);
+  const shiftsByDay = plComputeRowBasedMatch(sourceRoster);
   plCloseCard();
   plRenderRosterMulti(sourceRoster, shiftsByDay);
-  _plCurrentAgencies = [...names]; // this selection is now the placement's current state
+  _plCurrentAgencies = [..._plSelectedAgencies];
+  _plCurrentRosterByDay = shiftsByDay; // this is the new ownership baseline for the next change
   _plActiveAgencyKeys = _plDeriveActiveKeys(shiftsByDay);
+  _plFromToMap = {}; // mapping is scoped to this disruption — next one starts fresh
+  _plChosenSource = null;
   const sourceLabel = source === 'request' ? 'request\'s' : 'new agency selection\'s';
-  plToast('Roster regenerated', `Matched each day against the closest of ${names.length} selected agenc${names.length > 1 ? 'ies' : 'y'}, from the ${sourceLabel} pattern.`);
+  plToast('Roster regenerated', `Reassigned each old agency's days to your chosen new agency, from the ${sourceLabel} pattern.`);
 }
 
 // Renders per-day results where each day carries its OWN resolved
@@ -641,17 +790,34 @@ function plToast(title, body){
   t._timer = setTimeout(()=>t.classList.remove('show'), 3500);
 }
 
-// Initial state on page load: the placement already spans TWO agencies
-// (Agency C + Agency D) — a real N-agency starting point, matching what
-// this file is now built to demonstrate. The initial roster view is
-// computed the same way a regenerate would be, anchored against the
-// placement's own roster.
-plUpdateAgencyDisplay();
-{
-  const { shiftsByDay } = plComputeMultiAgencyMatch(_plCurrentAgencies, PLACEMENT_ROSTER);
-  plRenderRosterMulti(PLACEMENT_ROSTER, shiftsByDay);
-  _plActiveAgencyKeys = _plDeriveActiveKeys(shiftsByDay);
+// Loads a placement's starting state fresh — used both at page load and
+// whenever the demo switch changes placements. Resets everything (roster,
+// agency selection, From/To mapping) so the two placements never bleed
+// into each other's state.
+function plLoadPlacement(id){
+  const p = PLACEMENTS[id];
+  document.getElementById('pageTitlePl').textContent = p.title;
+  document.getElementById('plAgencyHint').innerHTML = '💡 ' + p.hint;
+  _plCurrentAgencies = [...p.currentAgencies];
+  _plSelectedAgencies = [..._plCurrentAgencies];
+  _plCurrentRosterByDay = { ...p.roster };
+  _plActiveAgencyKeys = _plDeriveActiveKeys(_plCurrentRosterByDay);
+  _plFromToMap = {};
+  _plChosenSource = null;
+  _plCfgRadioTarget = null;
+  plUpdateAgencyDisplay();
+  plCloseCard();
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay);
 }
+
+function plSwitchPlacement(id){
+  plLoadPlacement(id);
+  plToast('Placement switched', PLACEMENTS[id].currentAgencies.length === 1
+    ? 'Starts on 1 agency — pick 1 new agency for 1:1, or 2+ for 1:N.'
+    : 'Starts on 2 agencies — pick 1 new agency for N:1, or 2+ for N:N.');
+}
+
+plLoadPlacement('p1');
 </script>
 </body>
 </html>
