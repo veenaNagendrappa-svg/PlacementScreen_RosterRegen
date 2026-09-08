@@ -64,7 +64,8 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 .rna-card-btn:disabled:hover{background:#8a94a3;}
 .rna-card-btn.secondary:disabled{background:white;border-color:#c3c9d1;color:#9ca3af;cursor:not-allowed;}
 .rna-card-btn.secondary:disabled:hover{background:white;}
-.pl-info-wrap{position:relative;display:inline-flex;align-items:center;cursor:help;color:#003179;margin-left:4px;}
+.pl-info-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;cursor:help;margin-left:4px;
+  width:16px;height:16px;border-radius:50%;background:#003179;color:white;font-size:10px;font-style:normal;line-height:1;}
 .pl-info-popover{
   display:none;position:absolute;top:100%;left:0;margin-top:6px;z-index:30;
   background:white;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.15);
@@ -200,7 +201,7 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
     </div>
     <div class="col-md-6">
       <label class="field-label">Duration <span class="req">*</span></label>
-      <input class="field-input" value="18 Days" readonly>
+      <input class="field-input" id="plDuration" value="18 Days" onchange="plDurationChanged()">
     </div>
   </div>
 
@@ -380,6 +381,11 @@ let _plFromToMap = {};
 // "not yet chosen" (step 1 of 2). Reset whenever a fresh disruption
 // starts, so every new agency change asks again.
 let _plChosenSource = null;
+// 'agency' = full source-picker + From/To mapping flow. 'duration' = the
+// simpler date/duration-only flow (confirmed via Aug 10/18/21 grooming
+// transcripts): just Roster Manually / Regenerate, no source choice, no
+// per-agency mapping — agency hasn't changed, so there's nothing to map.
+let _plCardMode = 'agency';
 
 function plHasExistingRoster(){
   const weeks = document.getElementById('plWeeks');
@@ -439,7 +445,28 @@ document.addEventListener('click', function(e){
 
 
 // ── Selection change → roster-needs-attention card ──────────────────
+// Date/duration changed, agency untouched — the simpler flow confirmed
+// across the Aug 10/18/21 grooming calls: no source picker, no agency
+// mapping, just Roster Manually / Regenerate.
+function plDurationChanged(){
+  if(!plHasExistingRoster()) return;
+  _plCardMode = 'duration';
+  plRebuildCard();
+}
+
+// Regenerate for duration mode — extends/shrinks the EXISTING pattern
+// over the new date range. Agency ownership per day doesn't change at
+// all here; this is genuinely just "repeat the same weekly pattern for
+// more/fewer weeks," not a re-match against any agency.
+function plRegenerateDuration(){
+  plCloseCard();
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay);
+  plToast('Roster regenerated', 'Extended the existing pattern to fit the new duration.');
+  _plCardMode = 'agency'; // reset for the next disruption
+}
+
 function plOnSelectionChanged(){
+  _plCardMode = 'agency';
   plCloseCfgPanel();
   // If AT LEAST ONE agency actually providing a day in the current
   // roster is still in the new selection, this is additive, not a
@@ -495,10 +522,33 @@ function plFromToChanged(oldKey, newVal){
 }
 
 function plRebuildCard(){
-  const diverged = plIsDiverged();
   const desc = document.getElementById('plCardDesc');
   const ftr = document.getElementById('plCardFtr');
   const fthHeader = document.getElementById('plFromToHeader');
+
+  // DURATION MODE — date/duration changed, agency unchanged. No source
+  // to pick, no agency mapping — just confirm whether to extend/shrink
+  // the existing pattern or keep the roster exactly as-is and edit
+  // manually. Per Aug 10/18/21 grooming: manual here RETAINS the
+  // current roster (doesn't blank it), unlike agency-change's Roster
+  // Manually which starts clean — same button label either way, per
+  // the confirmed decision not to rename it, just different behaviour
+  // underneath.
+  if(_plCardMode === 'duration'){
+    fthHeader.style.display = 'none';
+    document.getElementById('plFromToRows').innerHTML = '';
+    desc.textContent = 'Changing the duration means the current roster may no longer fit. Extend or shrink the existing pattern, or keep what\'s there and adjust manually.';
+    ftr.innerHTML = `
+      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
+      <button class="rna-card-btn" onclick="plRegenerateDuration()">Regenerate</button>`;
+    document.getElementById('plCard').style.display = '';
+    document.getElementById('plRosterContent').style.display = 'none';
+    plSetActionButtonsDisabled(true);
+    plCloseCfgPanel();
+    return;
+  }
+
+  const diverged = plIsDiverged();
 
   // STEP 1 — pick a source first. Only relevant when diverged: if the
   // placement and request rosters already match, there's only one
@@ -509,10 +559,13 @@ function plRebuildCard(){
     desc.textContent = 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from before mapping agencies.';
     fthHeader.style.display = 'none'; // no From/To or Configure Shifts disclaimer until a source is actually picked
     document.getElementById('plFromToRows').innerHTML = '';
-    // Right-aligned sequence, matching the real Default Pattern
-    // Available card: secondary button, primary button, tertiary link
-    // last — not the link off on its own side.
+    // Single right-aligned cluster — the primary action sits rightmost
+    // (that's what a person actually reaches for last/first depending
+    // on reading direction, and what should read as "the" action).
+    // Tertiary/secondary items sit immediately to ITS left, within the
+    // same cluster — not pushed to the opposite edge of the panel.
     ftr.innerHTML = `
+      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
       <button class="rna-card-btn secondary" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('request')">
         <div style="font-weight:700;font-size:12px;">Request's original roster</div>
         <div style="font-weight:400;font-size:10px;opacity:.8;">What was originally asked for</div>
@@ -520,8 +573,7 @@ function plRebuildCard(){
       <button class="rna-card-btn" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('new-agency')">
         <div style="font-weight:700;font-size:12px;">Placement's current roster</div>
         <div style="font-weight:400;font-size:10px;opacity:.9;">What's actually scheduled right now</div>
-      </button>
-      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>`;
+      </button>`;
     plCloseCfgPanel();
     return;
   }
@@ -568,14 +620,23 @@ function plRebuildCard(){
     const toKey = _plFromToMap[oldKey];
     const missing = !_plHasShifts(toKey);
     if(missing) anyRowMissing = true;
-    const options = [...names].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)))
-      .map(k => `<option value="${k}" ${k===toKey?'selected':''}>${_plAgencyName(k)}${_plHasShifts(k)?'':' (no shifts)'}</option>`)
-      .join('');
+    // Only one possible target for this row (e.g. just one new agency
+    // selected overall) — nothing to actually choose, so show it as
+    // read-only text rather than a dropdown, per Felix's own comment
+    // that a single-option case should just display the agency plainly.
+    const toControl = names.length === 1
+      ? `<div style="font-size:12px;color:#374151;padding:0 4px;">${_plAgencyName(toKey)}</div>`
+      : (() => {
+          const options = [...names].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)))
+            .map(k => `<option value="${k}" ${k===toKey?'selected':''}>${_plAgencyName(k)}${_plHasShifts(k)?'':' (no shifts)'}</option>`)
+            .join('');
+          return `<select class="field-select" style="height:30px;font-size:12px;width:auto;min-width:180px;" onchange="plFromToChanged('${oldKey}', this.value)">${options}</select>`;
+        })();
     return `
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="width:140px;font-size:12px;color:#374151;flex-shrink:0;">${_plAgencyName(oldKey)}</div>
         <div style="color:#9ca3af;">→</div>
-        <select class="field-select" style="height:30px;font-size:12px;width:auto;min-width:180px;" onchange="plFromToChanged('${oldKey}', this.value)">${options}</select>
+        ${toControl}
         ${missing ? `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#92400e;">
             <span title="No shifts configured for this discipline">⚠</span>
             <a href="javascript:;" onclick="plOpenCfgShiftsForRow('${oldKey}')" style="color:#003179;font-weight:600;text-decoration:underline;">Configure shifts</a>
@@ -591,9 +652,9 @@ function plRebuildCard(){
   // (pick a different target, or configure shifts for this one).
   const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate from New Agency';
   ftr.innerHTML = `
-    ${diverged ? `<button class="rna-card-btn secondary" onclick="plChangeSource()">Change source</button>` : ''}
-    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">${diverged ? regenLabel : 'Regenerate'}</button>
-    <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>`;
+    ${diverged ? `<button class="rna-card-link" onclick="plChangeSource()">Change source</button>` : ''}
+    <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
+    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">${diverged ? regenLabel : 'Regenerate'}</button>`;
   plCloseCfgPanel();
 }
 
@@ -662,6 +723,14 @@ function plCloseCard(){
 
 function plChooseManual(){
   plCloseCard();
+  if(_plCardMode === 'duration'){
+    // Retain the current roster exactly as-is — per Aug 10/18/21
+    // grooming, manual on a duration-only change doesn't wipe anything,
+    // it just lets the coordinator keep editing what's already there.
+    plToast('Roster kept as-is', 'The current roster is unchanged — adjust it manually below if the new duration needs different days.');
+    _plCardMode = 'agency'; // reset for next disruption
+    return;
+  }
   _plCurrentAgencies = [..._plSelectedAgencies];
   _plActiveAgencyKeys = []; // manual roster — nothing is auto-matched, so nothing counts as "still active"
   _plCurrentRosterByDay = {};
