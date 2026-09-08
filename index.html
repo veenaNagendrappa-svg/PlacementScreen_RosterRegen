@@ -566,14 +566,8 @@ function plRebuildCard(){
     // same cluster — not pushed to the opposite edge of the panel.
     ftr.innerHTML = `
       <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
-      <button class="rna-card-btn secondary" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('request')">
-        <div style="font-weight:700;font-size:12px;">Request's original roster</div>
-        <div style="font-weight:400;font-size:10px;opacity:.8;">What was originally asked for</div>
-      </button>
-      <button class="rna-card-btn" style="height:auto;padding:8px 12px;white-space:normal;text-align:left;" onclick="plChooseSource('new-agency')">
-        <div style="font-weight:700;font-size:12px;">Placement's current roster</div>
-        <div style="font-weight:400;font-size:10px;opacity:.9;">What's actually scheduled right now</div>
-      </button>`;
+      <button class="rna-card-btn secondary" onclick="plChooseSource('request')">Regenerate from Request</button>
+      <button class="rna-card-btn" onclick="plChooseSource('new-agency')">Regenerate using new agency</button>`;
     plCloseCfgPanel();
     return;
   }
@@ -650,7 +644,7 @@ function plRebuildCard(){
   // the old competitive-matching model had. If any row's chosen target
   // lacks shifts, Regenerate is disabled until that row is resolved
   // (pick a different target, or configure shifts for this one).
-  const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate from New Agency';
+  const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate using new agency';
   ftr.innerHTML = `
     ${diverged ? `<button class="rna-card-link" onclick="plChangeSource()">Change source</button>` : ''}
     <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
