@@ -53,6 +53,12 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 .rna-card{ background:#eef3f8;border:1px solid #b9d3f0;border-radius:8px; padding:14px 16px;margin:8px 0 16px; }
 .rna-card-title{font-size:13px;font-weight:700;color:#003179;margin-bottom:8px;}
 .rna-card-desc{font-size:12px;color:#374151;line-height:1.5;margin-bottom:14px;}
+.pl-src-toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.pl-src-toggle{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:#6b7280;font-weight:600;}
+.pl-src-toggle .pl-src-pills{display:inline-flex;border:1px solid #d1d5db;border-radius:14px;overflow:hidden;}
+.pl-src-toggle button{border:none;background:white;color:#374151;font-size:11px;font-weight:600;padding:4px 12px;cursor:pointer;font-family:inherit;}
+.pl-src-toggle button.active{background:#003179;color:white;}
+.pl-src-toggle button:not(.active):hover{background:#f3f4f6;}
 .rna-card-ftr{display:flex;justify-content:flex-end;align-items:center;gap:16px;flex-wrap:wrap;}
 .rna-card-link{ background:none;border:none;padding:0;cursor:pointer; font-family:inherit;font-size:11px;font-weight:600;color:#555; }
 .rna-card-link:hover{color:#003179;text-decoration:underline;}
@@ -231,7 +237,10 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   <!-- "Roster needs attention" card — content built dynamically since
        the button count varies (2-way vs 3-way) -->
   <div class="rna-card" id="plCard" style="display:none;">
-    <div class="rna-card-title">Roster needs attention</div>
+    <div class="pl-src-toggle-row">
+      <div class="rna-card-title" style="margin-bottom:0;">Roster needs attention</div>
+      <div id="plSrcToggle"></div>
+    </div>
     <div class="rna-card-desc" id="plCardDesc"></div>
     <div id="plFromToHeader" style="display:none;">
       <div style="font-size:10px;color:#6b7280;font-weight:600;margin:10px 0 4px;">From → To</div>
@@ -322,6 +331,29 @@ function plRenderRequestRosterInfoIcon(){
   for(let w=1; w<=weeksToShow; w++){
     rows += `<tr><td style="text-align:left;font-weight:600;color:#6b7280;">Wk ${w}</td>` +
       DAYS.map(d => `<td>${REQUEST_ROSTER.days.includes(d) ? REQUEST_ROSTER.shift : '–'}</td>`).join('') +
+      `</tr>`;
+  }
+  return `<span class="pl-info-wrap">ⓘ<div class="pl-info-popover">
+      <table><thead><tr><th></th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="pl-more">+${moreWeeks} more week${moreWeeks>1?'s':''}</div>
+    </div></span>`;
+}
+
+// Same mechanism, pointed at the Placement's own current roster instead
+// of the Request's — the panel hides the actual roster table the whole
+// time it's up, so this is the only way to see the Placement side too,
+// symmetric to the Request preview above.
+function plRenderPlacementRosterInfoIcon(){
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weeksToShow = 2, moreWeeks = 1;
+  let rows = '';
+  for(let w=1; w<=weeksToShow; w++){
+    rows += `<tr><td style="text-align:left;font-weight:600;color:#6b7280;">Wk ${w}</td>` +
+      DAYS.map(d => {
+        const entry = _plCurrentRosterByDay[d];
+        return `<td>${entry ? entry.shift : '–'}</td>`;
+      }).join('') +
       `</tr>`;
   }
   return `<span class="pl-info-wrap">ⓘ<div class="pl-info-popover">
@@ -537,6 +569,7 @@ function plRebuildCard(){
   if(_plCardMode === 'duration'){
     fthHeader.style.display = 'none';
     document.getElementById('plFromToRows').innerHTML = '';
+    document.getElementById('plSrcToggle').innerHTML = '';
     desc.textContent = 'Changing the duration means the current roster may no longer fit. Extend or shrink the existing pattern, or keep what\'s there and adjust manually.';
     ftr.innerHTML = `
       <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
@@ -559,6 +592,7 @@ function plRebuildCard(){
     desc.textContent = 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from before mapping agencies.';
     fthHeader.style.display = 'none'; // no From/To or Configure Shifts disclaimer until a source is actually picked
     document.getElementById('plFromToRows').innerHTML = '';
+    document.getElementById('plSrcToggle').innerHTML = '';
     // Single right-aligned cluster — the primary action sits rightmost
     // (that's what a person actually reaches for last/first depending
     // on reading direction, and what should read as "the" action).
@@ -577,10 +611,22 @@ function plRebuildCard(){
   const names = _plSelectedAgencies;
   if(diverged){
     const label = source === 'request' ? 'request\'s original' : 'placement\'s current';
-    const infoIcon = source === 'request' ? plRenderRequestRosterInfoIcon() : '';
+    const infoIcon = source === 'request' ? plRenderRequestRosterInfoIcon() : plRenderPlacementRosterInfoIcon();
     desc.innerHTML = `Mapping from the ${label} roster.${infoIcon}`;
+    // One-click toggle, not a "go back and re-pick" link — switching
+    // recomputes the From rows in place against whichever roster is
+    // now active, live, no navigation away from the mapping.
+    document.getElementById('plSrcToggle').innerHTML = `
+      <div class="pl-src-toggle">
+        <span>Regenerating from</span>
+        <div class="pl-src-pills">
+          <button class="${source==='request'?'active':''}" onclick="plChooseSource('request')">Request</button>
+          <button class="${source==='new-agency'?'active':''}" onclick="plChooseSource('new-agency')">Placement</button>
+        </div>
+      </div>`;
   } else {
     desc.textContent = 'Changing the agency means the current roster may no longer apply.';
+    document.getElementById('plSrcToggle').innerHTML = '';
   }
 
   // One row per FROM agency (whichever agencies currently own at least
@@ -626,9 +672,23 @@ function plRebuildCard(){
             .join('');
           return `<select class="field-select" style="height:30px;font-size:12px;width:auto;min-width:180px;" onchange="plFromToChanged('${oldKey}', this.value)">${options}</select>`;
         })();
+    // DEMO ONLY — plain inline day/shift text under the agency name,
+    // as opposed to the info-icon/hover approach used elsewhere. Built
+    // specifically to show the team what this looks like directly, so
+    // the "does this get unreadable with more days/weeks" question can
+    // be raised concretely rather than argued in the abstract.
+    const agencyDaysLine = source === 'new-agency' ? (() => {
+      const days = Object.keys(_plCurrentRosterByDay)
+        .filter(d => _plCurrentRosterByDay[d] && _plCurrentRosterByDay[d].agencyKey === oldKey)
+        .map(d => `${d} ${_plCurrentRosterByDay[d].shift}`);
+      return days.length ? `<div style="font-size:10px;color:#9ca3af;margin-top:1px;">${days.join(', ')}</div>` : '';
+    })() : '';
     return `
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div style="width:140px;font-size:12px;color:#374151;flex-shrink:0;">${_plAgencyName(oldKey)}</div>
+        <div style="width:140px;flex-shrink:0;">
+          <div style="font-size:12px;color:#374151;">${_plAgencyName(oldKey)}</div>
+          ${agencyDaysLine}
+        </div>
         <div style="color:#9ca3af;">→</div>
         ${toControl}
         ${missing ? `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#92400e;">
@@ -646,7 +706,6 @@ function plRebuildCard(){
   // (pick a different target, or configure shifts for this one).
   const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate using new agency';
   ftr.innerHTML = `
-    ${diverged ? `<button class="rna-card-link" onclick="plChangeSource()">Change source</button>` : ''}
     <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
     <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">${diverged ? regenLabel : 'Regenerate'}</button>`;
   plCloseCfgPanel();
@@ -654,10 +713,6 @@ function plRebuildCard(){
 
 function plChooseSource(source){
   _plChosenSource = source;
-  plRebuildCard();
-}
-function plChangeSource(){
-  _plChosenSource = null;
   plRebuildCard();
 }
 
