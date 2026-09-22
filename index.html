@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Placement 103378 — Roster Regeneration Demo</title>
+<title>Placement 103378 — Roster Regeneration Demo (A — Stacked)</title>
 <style>
 * { box-sizing: border-box; }
 body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#fff; color:#111827; }
@@ -70,6 +70,9 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 .rna-card-btn:disabled:hover{background:#8a94a3;}
 .rna-card-btn.secondary:disabled{background:white;border-color:#c3c9d1;color:#9ca3af;cursor:not-allowed;}
 .rna-card-btn.secondary:disabled:hover{background:white;}
+/* DEAD CODE — hover-popover design rejected by Felix Sep 11 grooming;
+   left in place only so this diff is easy to review. Safe to delete
+   once this version is confirmed. */
 .pl-info-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;cursor:help;margin-left:4px;
   width:16px;height:16px;border-radius:50%;background:#003179;color:white;font-size:10px;font-style:normal;line-height:1;}
 .pl-info-popover{
@@ -117,6 +120,7 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   transform:translateY(8px);transition:all .25s;z-index:600;}
 .alloc-toast.show{opacity:1;transform:translateY(0);}
 .alloc-toast-title{font-weight:700;margin-bottom:2px;}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;padding:0;margin:-1px;}
 </style>
 </head>
 <body>
@@ -203,7 +207,7 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   <div class="row">
     <div class="col-md-6">
       <label class="field-label">Placement Dates <span class="req">*</span></label>
-      <input class="field-input" value="15/01/2026 – 09/02/2026" readonly>
+      <input class="field-input" id="plDates" value="15/01/2026 – 09/02/2026" onchange="plDurationChanged()">
     </div>
     <div class="col-md-6">
       <label class="field-label">Duration <span class="req">*</span></label>
@@ -242,28 +246,44 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
       <div id="plSrcToggle"></div>
     </div>
     <div class="rna-card-desc" id="plCardDesc"></div>
+
     <div id="plFromToHeader" style="display:none;">
-      <div style="font-size:10px;color:#6b7280;font-weight:600;margin:10px 0 4px;">From → To</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px;">
+        <div style="width:140px;flex-shrink:0;font-size:10px;color:#6b7280;font-weight:600;">From</div>
+        <div style="visibility:hidden;" aria-hidden="true">→</div>
+        <div style="font-size:10px;color:#6b7280;font-weight:600;">To</div>
+      </div>
       <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:6px;line-height:1.4;">
-        ⓘ Configure Shifts here is a mock-up only — not a proposed design for the real screen.
+        ⓘ Confirmed: Configure Shifts opens the existing Add/Configure Shift side panel — this inline form is a placeholder only, not a proposed design.
       </div>
     </div>
     <div id="plFromToRows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div id="plCfgAddForm" style="display:none;margin-bottom:10px;"></div>
     <div class="rna-card-ftr" id="plCardFtr"></div>
+
+    <!-- REFINEMENT — actions (mapping rows + footer buttons) now come
+         FIRST inside the card; the roster reference sits below them,
+         not above. Rationale: a 52-week placement makes the reference
+         table tall enough that putting it above the actions would
+         force scrolling just to reach Regenerate. Empty slot only —
+         the real content lives at #plRosterHome by default (steady
+         state, card closed) and is moved in here on open, same as
+         before, just relocated to the bottom of the card. -->
+    <div id="plRosterSlot"></div>
   </div>
 
-  <div id="plRosterContent">
-    <div style="font-size:10.5px;color:#374151;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:5px 8px;margin-bottom:8px;line-height:1.5;">
-      <strong>Legend:</strong> plain row = match within 4 hours of the requested time &nbsp;·&nbsp;
-      <span style="color:#c62828;font-weight:700;">!</span> = a match was found but it's <strong>more than 4 hours</strong> from the requested time &nbsp;·&nbsp;
-      <span style="color:#92400e;">"No matching shift found"</span> = no selected agency had anything available that day
+  <div id="plRosterHome">
+    <div id="plRosterContent" style="background:white;border:1px solid #d7e3f2;border-radius:6px;padding:12px 14px;">
+      <div id="plTableCaption" style="font-size:12px;font-weight:700;color:#003179;margin-bottom:6px;"></div>
+      <div id="plSourceLive" class="sr-only" aria-live="polite"></div>
+      <div id="plBanners"></div>
+      <div id="plWeeks"></div>
     </div>
-    <div id="plBanners"></div>
-    <div id="plWeeks"></div>
   </div>
 
 </div>
+
+
 
 <div class="page-footer">
   <button class="btn-outline" id="plBtnPublish" onclick="plToast('Placement published', 'Changes saved and published.')">Publish</button>
@@ -320,47 +340,51 @@ function plIsDiverged(){
   return !a.every((d,i) => d === b[i]);
 }
 
-// Info icon + hover popover showing the Request's original roster —
-// otherwise invisible once the placement has drifted (nothing else on
-// screen shows it once Request is picked as source). Static "+N more
-// weeks" like the real hover panel, no expand.
-function plRenderRequestRosterInfoIcon(){
-  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const weeksToShow = 2, moreWeeks = 1;
-  let rows = '';
-  for(let w=1; w<=weeksToShow; w++){
-    rows += `<tr><td style="text-align:left;font-weight:600;color:#6b7280;">Wk ${w}</td>` +
-      DAYS.map(d => `<td>${REQUEST_ROSTER.days.includes(d) ? REQUEST_ROSTER.shift : '–'}</td>`).join('') +
-      `</tr>`;
+// ── SEP 11 UPDATE ────────────────────────────────────────────────
+// Felix (Sep 11 grooming) rejected the hover-popover pair above:
+// "I would display it on the grid itself... realistically they're
+// going to want to see it on the screen as they're choosing the
+// agency... they can't do that if they're having to hover over,
+// unhover to go change it. They then lose visibility of that."
+// Replaced with a persistent table reusing the SAME surface
+// (#plWeeks/#plBanners) that already renders the regenerated result —
+// one canonical roster view: current, then regenerated in place.
+// No new UI surface, no hover, no keyboard-inaccessible popover.
+
+// Builds the CURRENT (pre-regenerate) per-day roster for whichever
+// source is active, so it renders through the exact same table
+// function used for results. No flags here — a flag only means
+// something once a day has been matched against a NEW agency.
+//
+// DEMO SIMPLIFICATION — same known gap already flagged lower in this
+// file for the From/To rows: this build has no separate model for
+// "the request's own agency," so a Request-basis view reuses the
+// placement's current per-day agency, filtered to the request's day
+// pattern, rather than showing the request's true original agency.
+// Real fix is the same one already flagged: model the request's own
+// single agency explicitly. Not solved here.
+function plBuildSourceRosterByDay(source){
+  if(source === 'request'){
+    const out = {};
+    Object.keys(_plCurrentRosterByDay).forEach(d => {
+      out[d] = REQUEST_ROSTER.days.includes(d) ? _plCurrentRosterByDay[d] : null;
+    });
+    return out;
   }
-  return `<span class="pl-info-wrap">ⓘ<div class="pl-info-popover">
-      <table><thead><tr><th></th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
-      <tbody>${rows}</tbody></table>
-      <div class="pl-more">+${moreWeeks} more week${moreWeeks>1?'s':''}</div>
-    </div></span>`;
+  return { ..._plCurrentRosterByDay }; // 'new-agency' / Placement basis — as-is
 }
 
-// Same mechanism, pointed at the Placement's own current roster instead
-// of the Request's — the panel hides the actual roster table the whole
-// time it's up, so this is the only way to see the Placement side too,
-// symmetric to the Request preview above.
-function plRenderPlacementRosterInfoIcon(){
-  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const weeksToShow = 2, moreWeeks = 1;
-  let rows = '';
-  for(let w=1; w<=weeksToShow; w++){
-    rows += `<tr><td style="text-align:left;font-weight:600;color:#6b7280;">Wk ${w}</td>` +
-      DAYS.map(d => {
-        const entry = _plCurrentRosterByDay[d];
-        return `<td>${entry ? entry.shift : '–'}</td>`;
-      }).join('') +
-      `</tr>`;
-  }
-  return `<span class="pl-info-wrap">ⓘ<div class="pl-info-popover">
-      <table><thead><tr><th></th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
-      <tbody>${rows}</tbody></table>
-      <div class="pl-more">+${moreWeeks} more week${moreWeeks>1?'s':''}</div>
-    </div></span>`;
+// Renders the live source roster into the same table Regenerate will
+// later overwrite, and updates an aria-live region + visible caption
+// so the active source is announced on every toggle flip — the old
+// hover design had no announcement at all (and no keyboard path in).
+function plRenderSourceRoster(source){
+  const shiftsByDay = plBuildSourceRosterByDay(source);
+  const sourceRoster = source === 'request' ? REQUEST_ROSTER : PLACEMENT_ROSTER;
+  const label = source === 'request' ? "Request's original roster" : "Placement's current roster";
+  plRenderRosterMulti(sourceRoster, shiftsByDay, true); // read-only — mapping in progress, this is about to be replaced
+  document.getElementById('plTableCaption').textContent = label;
+  document.getElementById('plSourceLive').textContent = `Showing ${label}.`;
 }
 
 // Two demo placements, so every scenario is reachable in one step
@@ -415,7 +439,7 @@ let _plFromToMap = {};
 let _plChosenSource = null;
 // 'agency' = full source-picker + From/To mapping flow. 'duration' = the
 // simpler date/duration-only flow (confirmed via Aug 10/18/21 grooming
-// transcripts): just Roster Manually / Regenerate, no source choice, no
+// transcripts): just Clear roster / Regenerate roster, no source choice, no
 // per-agency mapping — agency hasn't changed, so there's nothing to map.
 let _plCardMode = 'agency';
 
@@ -429,12 +453,35 @@ function plSetActionButtonsDisabled(disabled){
   document.getElementById('plBtnSave').disabled = disabled;
 }
 
+// Moves the single #plRosterContent node between its steady-state home
+// (outside the card, always visible when there's no disruption) and a
+// slot inside the card (so card + table read as one continuous panel
+// while a mapping decision is in progress). No duplicated markup, no
+// duplicate ids — same node, same #plWeeks/#plBanners targets either
+// way, just a different parent.
+function plRosterIntoCard(){
+  document.getElementById('plRosterSlot').appendChild(document.getElementById('plRosterContent'));
+}
+function plRosterToHome(){
+  document.getElementById('plRosterHome').appendChild(document.getElementById('plRosterContent'));
+}
+
 // ── Multi-select Agency field ───────────────────────────────────────
 function plAgencyDdToggle(){
   const dd = document.getElementById('plAgencyDdList');
   const disp = document.getElementById('plAgencyDisplay');
   const isOpen = dd.classList.contains('open');
-  if(isOpen){ dd.classList.remove('open'); disp.classList.remove('open'); return; }
+  if(isOpen){
+    dd.classList.remove('open'); disp.classList.remove('open');
+    // BUG FIX — closing the dropdown this way (clicking the Agency
+    // field again, the natural way to close what you opened) never
+    // evaluated the selection at all. Only closing via a click
+    // OUTSIDE the dropdown (the document-level listener below) did.
+    // Same evaluation, same "once settled" reasoning — just also
+    // wired to this close path, not only the other one.
+    plOnSelectionChanged();
+    return;
+  }
   plAgencyDdRender();
   dd.classList.add('open'); disp.classList.add('open');
 }
@@ -479,10 +526,11 @@ document.addEventListener('click', function(e){
 // ── Selection change → roster-needs-attention card ──────────────────
 // Date/duration changed, agency untouched — the simpler flow confirmed
 // across the Aug 10/18/21 grooming calls: no source picker, no agency
-// mapping, just Roster Manually / Regenerate.
+// mapping, just Clear roster / Regenerate roster.
 function plDurationChanged(){
   if(!plHasExistingRoster()) return;
   _plCardMode = 'duration';
+  plRosterIntoCard();
   plRebuildCard();
 }
 
@@ -492,33 +540,35 @@ function plDurationChanged(){
 // more/fewer weeks," not a re-match against any agency.
 function plRegenerateDuration(){
   plCloseCard();
-  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay);
-  plToast('Roster regenerated', 'Extended the existing pattern to fit the new duration.');
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+  plToast('Roster regenerated', 'Fitted the existing pattern to the new dates and duration.');
   _plCardMode = 'agency'; // reset for the next disruption
 }
 
 function plOnSelectionChanged(){
   _plCardMode = 'agency';
   plCloseCfgPanel();
-  // If AT LEAST ONE agency actually providing a day in the current
-  // roster is still in the new selection, this is additive, not a
-  // replacement — same rule as Process Request: retaining the real
-  // source of the roster means it's still at least partly valid.
-  // Deliberately checked against _plActiveAgencyKeys (who's actually
-  // winning days) rather than the nominal _plCurrentAgencies list — an
-  // agency can be nominally "current" without ever having won a single
-  // day's closest-match tie-break, so it isn't really the thing the
-  // coordinator is thinking of as "the placement's agency."
-  const stillOverlaps = _plActiveAgencyKeys.some(a => _plSelectedAgencies.includes(a));
-  if(stillOverlaps){
-    document.getElementById('plCard').style.display = 'none';
-    document.getElementById('plRosterContent').style.display = '';
-    plSetActionButtonsDisabled(false);
+  // BUG FIX — the old check only asked "is at least one active agency
+  // still selected?" and treated that as fully safe. That's wrong: if
+  // Agency C (owns Mon/Wed) and Agency D (owns Fri) are both active,
+  // and the coordinator reselects just Agency D, the old check saw D
+  // still selected and skipped the panel entirely — silently leaving
+  // Agency C's Mon/Wed days pointing at an agency that's no longer
+  // even in the selection. The correct check is per-agency: any
+  // currently-active agency that's no longer selected is orphaned and
+  // needs remapping, regardless of whether OTHER active agencies
+  // happen to remain selected.
+  const orphanedKeys = _plActiveAgencyKeys.filter(a => !_plSelectedAgencies.includes(a));
+  if(orphanedKeys.length === 0){
+    // Every agency currently providing a day is still selected —
+    // genuinely additive (a new agency was added alongside, nothing
+    // removed), so nothing needs remapping.
+    plCloseCard();
     return;
   }
   if(!plHasExistingRoster()) return;
 
-  document.getElementById('plRosterContent').style.display = 'none';
+  plRosterIntoCard(); // table now renders inside the card as one panel; plRebuildCard decides visibility (hidden only for duration mode)
   document.getElementById('plCard').style.display = '';
   plSetActionButtonsDisabled(true);
   plRebuildCard();
@@ -566,16 +616,27 @@ function plRebuildCard(){
   // Manually which starts clean — same button label either way, per
   // the confirmed decision not to rename it, just different behaviour
   // underneath.
+  //
+  // SEP 14 CALL UPDATE — Felix: "the info can cover the different
+  // scenarios for the date and [the] duration change. I reckon we
+  // should still show the original roster so that they can see that."
+  // Veena: "I'll reuse the same panel, just that this will not be
+  // here" — "this" = the From/To mapping rows and source toggle, which
+  // genuinely don't apply here (agency hasn't changed, nothing to
+  // map). The roster reference itself is NOT what's being dropped —
+  // it was wrongly hidden entirely before this update.
   if(_plCardMode === 'duration'){
     fthHeader.style.display = 'none';
     document.getElementById('plFromToRows').innerHTML = '';
     document.getElementById('plSrcToggle').innerHTML = '';
-    desc.textContent = 'Changing the duration means the current roster may no longer fit. Extend or shrink the existing pattern, or keep what\'s there and adjust manually.';
+    desc.textContent = 'The dates or duration have changed — the roster below may need review.';
     ftr.innerHTML = `
-      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
-      <button class="rna-card-btn" onclick="plRegenerateDuration()">Regenerate</button>`;
+      <button class="rna-card-link" onclick="plChooseManual()">Clear roster</button>
+      <button class="rna-card-btn" onclick="plRegenerateDuration()">Regenerate roster</button>`;
     document.getElementById('plCard').style.display = '';
-    document.getElementById('plRosterContent').style.display = 'none';
+    document.getElementById('plRosterContent').style.display = '';
+    plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, true); // read-only reference — no action column, no warnings, matches the agency-mode treatment
+    document.getElementById('plTableCaption').textContent = "Placement's current roster";
     plSetActionButtonsDisabled(true);
     plCloseCfgPanel();
     return;
@@ -583,51 +644,47 @@ function plRebuildCard(){
 
   const diverged = plIsDiverged();
 
-  // STEP 1 — pick a source first. Only relevant when diverged: if the
-  // placement and request rosters already match, there's only one
-  // possible source, so this step is skipped entirely. The mapping
-  // itself can't be built correctly until the source is known — "From"
-  // means something different depending on which roster you're asking.
-  if(diverged && !_plChosenSource){
-    desc.textContent = 'Changing the agency means the current roster may no longer apply. The placement\'s roster differs from the original request — choose which one to regenerate from before mapping agencies.';
-    fthHeader.style.display = 'none'; // no From/To or Configure Shifts disclaimer until a source is actually picked
-    document.getElementById('plFromToRows').innerHTML = '';
-    document.getElementById('plSrcToggle').innerHTML = '';
-    // Single right-aligned cluster — the primary action sits rightmost
-    // (that's what a person actually reaches for last/first depending
-    // on reading direction, and what should read as "the" action).
-    // Tertiary/secondary items sit immediately to ITS left, within the
-    // same cluster — not pushed to the opposite edge of the panel.
-    ftr.innerHTML = `
-      <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
-      <button class="rna-card-btn secondary" onclick="plChooseSource('request')">Regenerate from Request</button>
-      <button class="rna-card-btn" onclick="plChooseSource('new-agency')">Regenerate using new agency</button>`;
-    plCloseCfgPanel();
-    return;
-  }
-  fthHeader.style.display = ''; // back on now that a source is chosen (or there was never a choice to make)
+  // SEP 11 UPDATE — the 3-button gate ("pick a source before you see
+  // anything") is removed. Felix: "for the most part we know that
+  // they probably want to regenerate from the roster that they
+  // already had in this case... rather than forcing them to click a
+  // button and then see the information they need, we can start them
+  // off by seeing the information they need." Defaulting to Placement
+  // ('new-agency' key) below achieves this — it's already the fallback
+  // when _plChosenSource is null, so no gate branch is needed at all.
+  // The pill toggle remains the only path to Request; "Roster
+  // Manually" moves from a peer gate button to the persistent footer
+  // link it already is in the non-diverged case, below.
+  fthHeader.style.display = '';
 
   const source = _plChosenSource || 'new-agency'; // matched case has no real choice — placement basis
   const names = _plSelectedAgencies;
   if(diverged){
-    const label = source === 'request' ? 'request\'s original' : 'placement\'s current';
-    const infoIcon = source === 'request' ? plRenderRequestRosterInfoIcon() : plRenderPlacementRosterInfoIcon();
-    desc.innerHTML = `Mapping from the ${label} roster.${infoIcon}`;
+    desc.textContent = 'The agency has changed — the roster below may need review.';
     // One-click toggle, not a "go back and re-pick" link — switching
-    // recomputes the From rows in place against whichever roster is
-    // now active, live, no navigation away from the mapping.
+    // recomputes the From rows AND the roster table below in place
+    // against whichever roster is now active, live, no navigation
+    // away from the mapping. aria-pressed carries the active state for
+    // screen-reader users — the .active class alone isn't sufficient
+    // (WCAG 4.1.2 Name, Role, Value).
     document.getElementById('plSrcToggle').innerHTML = `
       <div class="pl-src-toggle">
-        <span>Regenerating from</span>
-        <div class="pl-src-pills">
-          <button class="${source==='request'?'active':''}" onclick="plChooseSource('request')">Request</button>
-          <button class="${source==='new-agency'?'active':''}" onclick="plChooseSource('new-agency')">Placement</button>
+        <span id="plSrcToggleLbl">Regenerating from</span>
+        <div class="pl-src-pills" role="group" aria-labelledby="plSrcToggleLbl">
+          <button aria-pressed="${source==='request'}" class="${source==='request'?'active':''}" onclick="plChooseSource('request')">Request</button>
+          <button aria-pressed="${source==='new-agency'}" class="${source==='new-agency'?'active':''}" onclick="plChooseSource('new-agency')">Placement</button>
         </div>
       </div>`;
   } else {
-    desc.textContent = 'Changing the agency means the current roster may no longer apply.';
+    desc.textContent = 'The agency has changed — the roster below may need review.';
     document.getElementById('plSrcToggle').innerHTML = '';
   }
+
+  // SEP 11 UPDATE — table shown live below the mapping rows instead of
+  // hidden behind a hover icon. Same surface Regenerate updates in
+  // place afterwards, so there's exactly one roster view throughout.
+  document.getElementById('plRosterContent').style.display = '';
+  plRenderSourceRoster(source);
 
   // One row per FROM agency (whichever agencies currently own at least
   // one day) — not a collapsed "+N others" summary. Each row keeps or
@@ -643,7 +700,14 @@ function plRebuildCard(){
   // That's a real, separate follow-up (showing the request's own
   // roster, since it's otherwise invisible once the placement has
   // drifted) — not solved by this sequencing change alone.
-  const fromKeys = [..._plActiveAgencyKeys].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
+  // BUG FIX — this used to be every currently-active agency, even ones
+  // still validly selected. If Agency D owns Friday and stays selected
+  // alongside a new pick, Agency D doesn't need a row — it's not going
+  // anywhere. Only agencies that own a day AND are no longer in the
+  // selection actually need remapping.
+  const fromKeys = _plActiveAgencyKeys
+    .filter(a => !_plSelectedAgencies.includes(a))
+    .sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
   let anyRowMissing = false;
   const rowsHtml = fromKeys.map(oldKey => {
     // Sticky once set — recompute only if this row genuinely has no
@@ -672,22 +736,17 @@ function plRebuildCard(){
             .join('');
           return `<select class="field-select" style="height:30px;font-size:12px;width:auto;min-width:180px;" onchange="plFromToChanged('${oldKey}', this.value)">${options}</select>`;
         })();
-    // DEMO ONLY — plain inline day/shift text under the agency name,
-    // as opposed to the info-icon/hover approach used elsewhere. Built
-    // specifically to show the team what this looks like directly, so
-    // the "does this get unreadable with more days/weeks" question can
-    // be raised concretely rather than argued in the abstract.
-    const agencyDaysLine = source === 'new-agency' ? (() => {
-      const days = Object.keys(_plCurrentRosterByDay)
-        .filter(d => _plCurrentRosterByDay[d] && _plCurrentRosterByDay[d].agencyKey === oldKey)
-        .map(d => `${d} ${_plCurrentRosterByDay[d].shift}`);
-      return days.length ? `<div style="font-size:10px;color:#9ca3af;margin-top:1px;">${days.join(', ')}</div>` : '';
-    })() : '';
+    // SEP 11 UPDATE — this used to carry a "DEMO ONLY" gray day/shift
+    // line under the agency name (source === 'new-agency' only), built
+    // to surface the "does this get unreadable at scale" question.
+    // Felix answered it directly: "we can get rid of the gray writing
+    // under the old agencies because they'll just have the whole piece
+    // of information there" — referring to the on-grid table above,
+    // which now shows this same information persistently. Removed.
     return `
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="width:140px;flex-shrink:0;">
           <div style="font-size:12px;color:#374151;">${_plAgencyName(oldKey)}</div>
-          ${agencyDaysLine}
         </div>
         <div style="color:#9ca3af;">→</div>
         ${toControl}
@@ -704,10 +763,18 @@ function plRebuildCard(){
   // the old competitive-matching model had. If any row's chosen target
   // lacks shifts, Regenerate is disabled until that row is resolved
   // (pick a different target, or configure shifts for this one).
-  const regenLabel = source === 'request' ? 'Regenerate from Request' : 'Regenerate using new agency';
+  // SEP 14 CALL UPDATE — Felix, live on the call reviewing this exact
+  // flow: "I reckon the buttons should probably be general, but the
+  // message that we're showing under the header, we can probably make
+  // more specific to each scenario." Veena proposed "Regenerate
+  // roster" as the one common label; Felix confirmed: "yeah, I reckon
+  // let's go with that, regenerate roster... based on where they
+  // regenerate from, then it will be obvious what they've selected."
+  // Label is now CONSTANT across all three scenarios — scenario detail
+  // lives only in the description text above (desc), not the button.
   ftr.innerHTML = `
-    <button class="rna-card-link" onclick="plChooseManual()">Roster Manually</button>
-    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">${diverged ? regenLabel : 'Regenerate'}</button>`;
+    <button class="rna-card-link" onclick="plChooseManual()">Clear roster</button>
+    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">Regenerate roster</button>`;
   plCloseCfgPanel();
 }
 
@@ -765,7 +832,17 @@ function plCloseCfgPanel(){
 
 function plCloseCard(){
   document.getElementById('plCard').style.display = 'none';
+  plRosterToHome();
   document.getElementById('plRosterContent').style.display = '';
+  // Default back to the normal editable view — the table may have been
+  // rendered read-only (no action column, no warnings) while a mapping
+  // or duration decision was in progress. Callers that immediately show
+  // a different result (plChooseRegenerateMulti, plRegenerateDuration,
+  // the agency-mode Clear-roster branch) simply re-render over this
+  // right after, so this is just a safe default, not a fight over who
+  // renders last.
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+  document.getElementById('plTableCaption').textContent = "Placement's current roster";
   plSetActionButtonsDisabled(false);
   plCloseCfgPanel();
 }
@@ -776,7 +853,7 @@ function plChooseManual(){
     // Retain the current roster exactly as-is — per Aug 10/18/21
     // grooming, manual on a duration-only change doesn't wipe anything,
     // it just lets the coordinator keep editing what's already there.
-    plToast('Roster kept as-is', 'The current roster is unchanged — adjust it manually below if the new duration needs different days.');
+    plToast('Roster kept as-is', 'The current roster is unchanged — adjust it manually below if the new dates or duration need different days.');
     _plCardMode = 'agency'; // reset for next disruption
     return;
   }
@@ -785,6 +862,7 @@ function plChooseManual(){
   _plCurrentRosterByDay = {};
   _plFromToMap = {};
   _plChosenSource = null;
+  document.getElementById('plTableCaption').textContent = '';
   document.getElementById('plBanners').innerHTML = '';
   document.getElementById('plWeeks').innerHTML = `
     <div style="font-size:12px;color:#9ca3af;font-style:italic;padding:16px 0;text-align:center;border:1px dashed #e2e5ea;border-radius:6px;">
@@ -818,6 +896,16 @@ function plComputeRowBasedMatch(sourceRoster){
   sourceRoster.days.forEach(day => {
     const owner = _plCurrentRosterByDay[day];
     if(!owner || !owner.agencyKey){ shiftsByDay[day] = null; return; } // day has no current owner — nothing to reassign
+    // BUG FIX — an owner still directly in the new selection isn't
+    // orphaned and was never given a From/To row (see fromKeys above),
+    // so it has no entry in _plFromToMap. Before this fix, that made
+    // toKey undefined and the day silently dropped to null (unscheduled)
+    // even though the coordinator never touched that agency. Such a day
+    // just keeps its existing agency/shift/time exactly as-is.
+    if(_plSelectedAgencies.includes(owner.agencyKey)){
+      shiftsByDay[day] = { ...owner };
+      return;
+    }
     const toKey = _plFromToMap[owner.agencyKey];
     const sc = toKey ? PL_AGENCY_SCENARIOS[toKey] : null;
     const cand = sc && sc.shifts ? sc.shifts[day] : null;
@@ -832,7 +920,9 @@ function plChooseRegenerateMulti(source){
   const sourceRoster = source === 'request' ? REQUEST_ROSTER : PLACEMENT_ROSTER;
   const shiftsByDay = plComputeRowBasedMatch(sourceRoster);
   plCloseCard();
-  plRenderRosterMulti(sourceRoster, shiftsByDay);
+  plRenderRosterMulti(sourceRoster, shiftsByDay, false);
+  document.getElementById('plTableCaption').textContent = 'Regenerated roster';
+  document.getElementById('plSourceLive').textContent = 'Roster regenerated.';
   _plCurrentAgencies = [..._plSelectedAgencies];
   _plCurrentRosterByDay = shiftsByDay; // this is the new ownership baseline for the next change
   _plActiveAgencyKeys = _plDeriveActiveKeys(shiftsByDay);
@@ -845,9 +935,46 @@ function plChooseRegenerateMulti(source){
 // Renders per-day results where each day carries its OWN resolved
 // agency — unlike the original single-scenario renderer, a multi-agency
 // regenerate can legitimately show a different agency on different days.
-function plRenderRosterMulti(sourceRoster, shiftsByDay){
+// Which row (by day-of-week) is currently showing an inline edit form,
+// or null if none. Editing only ever happens in the normal (non-
+// read-only) view — Edit is hidden entirely while the panel is open,
+// so there's never a conflict between the two states.
+let _plEditingDay = null;
+
+function plEditDay(day){
+  _plEditingDay = day;
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+}
+function plCancelEditDay(){
+  _plEditingDay = null;
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+}
+function plSaveEditDay(day){
+  const agencyKey = document.getElementById('plEditAgency').value;
+  const shift = document.getElementById('plEditShift').value;
+  const start = document.getElementById('plEditStart').value;
+  const end = document.getElementById('plEditEnd').value;
+  if(agencyKey && start && end){
+    const scenario = PL_AGENCY_SCENARIOS[agencyKey];
+    _plCurrentRosterByDay[day] = { agencyKey, agencyName: scenario ? scenario.name : agencyKey, shift, start, end };
+  } else {
+    delete _plCurrentRosterByDay[day];
+  }
+  _plEditingDay = null;
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+}
+
+function plRenderRosterMulti(sourceRoster, shiftsByDay, readOnly){
   const BASE_DATE = new Date(2026, 0, 12); // Mon 12 Jan 2026
   const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  // Per your QA reference — normal steady-state roster keeps a real,
+  // functioning Action/Edit column (labelled "Action", matching QA).
+  // While the panel is open, that column is HIDDEN entirely, not
+  // disabled in place — this is what Felix meant by "hide the action
+  // column completely," and matches how you confirmed the real app
+  // actually behaves (the panel is the only thing that changes; the
+  // roster underneath never grows/shrinks an extra disabled-looking
+  // column).
   let weeksHtml = '';
   for(let w=0; w<3; w++){
     let rows = '';
@@ -859,43 +986,94 @@ function plRenderRosterMulti(sourceRoster, shiftsByDay){
       const dateStr = `${day}, ${dd}/${mm}`;
       const wasRequested = sourceRoster.days.includes(day);
       const shiftData = wasRequested ? shiftsByDay[day] : null;
-      if(shiftData){
-        const flagged = shiftData.flag === 'differs';
-        const flagIcon = flagged ? ` <span style="color:#c62828;font-weight:700;" title="Hours differ from requested">&#33;</span>` : '';
+      // No warnings/flags at all while readOnly (panel open,
+      // pre-regenerate reference) — per Sep 14, this is just today's
+      // actual roster, not a match result.
+      //
+      // Flag placement confirmed from the real app (your screenshot):
+      // the "!" sits next to "Edit" in the Action column — not next to
+      // the shift time — so a row reads "Edit !".
+      const flagged = !readOnly && shiftData && shiftData.flag === 'differs';
+      const actionCell = readOnly ? '' : `<td style="font-size:11px;padding:5px 6px;white-space:nowrap;"><a class="ae-roster-edit-link" onclick="plEditDay('${day}')">Edit</a>${flagged ? ` <span style="color:#c62828;font-weight:700;" title="Hours differ from requested">&#33;</span>` : ''}</td>`;
+      // Sep 11 grooming — Felix: "we won't be able to highlight the
+      // shifts that aren't found because you've lost your old roster
+      // and you've now regenerated a new one. So the only thing we'll
+      // be able to highlight is where the shift is greater than four
+      // hours." This applies to the RESULT view (after regenerating),
+      // not just the pre-regenerate reference — a day with no match is
+      // never distinguished or highlighted anywhere, only >4hr
+      // differences are. Previously this was only suppressed for the
+      // read-only reference and still showed, highlighted, in the
+      // result view — that was backwards; fixed here.
+      if(!readOnly && _plEditingDay === day){
+        // Inline edit row — prefilled from shiftData when the day
+        // already has values, matching the real per-day editor
+        // (screenshot): Agency / Shift dropdowns, Start/End time
+        // pickers, Save / Cancel. Empty defaults for an unscheduled day
+        // — nothing to prefill there.
+        const agencyOptions = Object.keys(PL_AGENCY_SCENARIOS).map(k =>
+          `<option value="${k}" ${shiftData && shiftData.agencyKey===k ? 'selected' : ''}>${PL_AGENCY_SCENARIOS[k].name}</option>`
+        ).join('');
+        const shiftOptions = ['AM','PM','Evening','Night'].map(s =>
+          `<option value="${s}" ${shiftData && shiftData.shift===s ? 'selected' : ''}>${s}</option>`
+        ).join('');
+        rows += `<tr style="background:#f0f6ff;">
+          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
+          <td style="padding:5px 6px;"><select id="plEditAgency" style="font-size:11px;padding:4px;width:100%;border:1px solid #9db8dd;border-radius:4px;">
+            <option value="">— Not scheduled —</option>${agencyOptions}
+          </select></td>
+          <td style="padding:5px 6px;"><select id="plEditShift" style="font-size:11px;padding:4px;width:100%;border:1px solid #9db8dd;border-radius:4px;">${shiftOptions}</select></td>
+          <td style="padding:5px 6px;"><input type="time" id="plEditStart" value="${shiftData ? shiftData.start : ''}" style="font-size:11px;padding:4px;width:100%;border:1px solid #9db8dd;border-radius:4px;"></td>
+          <td style="padding:5px 6px;"><input type="time" id="plEditEnd" value="${shiftData ? shiftData.end : ''}" style="font-size:11px;padding:4px;width:100%;border:1px solid #9db8dd;border-radius:4px;"></td>
+          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;line-height:1.6;">
+            <a href="javascript:;" onclick="plSaveEditDay('${day}')" style="color:#1976d2;">Save</a><br>
+            <a href="javascript:;" onclick="plCancelEditDay()" style="color:#666;">Cancel</a>
+          </td>
+        </tr>`;
+      } else if(shiftData){
         rows += `<tr${flagged?' class="ae-roster-day-mismatch"':''}>
           <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
           <td style="font-size:11px;padding:5px 6px;color:#003179;">${shiftData.agencyName}</td>
           <td style="font-size:11px;padding:5px 6px;">${shiftData.shift}</td>
           <td style="font-size:11px;padding:5px 6px;">${shiftData.start}</td>
-          <td style="font-size:11px;padding:5px 6px;">${shiftData.end}</td>
-          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a>${flagIcon}</td></tr>`;
-      } else if(wasRequested){
-        rows += `<tr class="ae-roster-day-mismatch">
-          <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
-          <td colspan="4" style="font-size:11px;padding:5px 6px;color:#92400e;">No matching shift found</td>
-          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a></td></tr>`;
+          <td style="font-size:11px;padding:5px 6px;">${shiftData.end}</td>${actionCell}</tr>`;
       } else {
         rows += `<tr>
           <td style="font-size:11px;padding:5px 6px;white-space:nowrap;">${dateStr}</td>
-          <td colspan="4" style="padding:5px 6px;"><span class="ae-notscheduled">Not Scheduled</span></td>
-          <td style="font-size:11px;padding:5px 6px;"><a class="ae-roster-edit-link">Edit</a></td></tr>`;
+          <td colspan="4" style="padding:5px 6px;"><span class="ae-notscheduled">Not Scheduled</span></td>${actionCell}</tr>`;
       }
     });
     weeksHtml += `<div style="font-size:11px;font-weight:700;color:#003179;padding:8px 0 4px;">Week ${w+1}</div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
         <thead><tr style="background:#f5f7ff;">
-          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Day</th>
-          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Agency</th>
-          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Shift</th>
-          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Start</th>
-          <th style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">End</th>
-          <th style="border-bottom:1px solid #e8e8e8;"></th>
+          <th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Day</th>
+          <th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Agency</th>
+          <th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Shift</th>
+          <th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Start Time</th>
+          <th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">End Time</th>
+          ${readOnly ? '' : '<th scope="col" style="text-align:left;padding:5px 6px;font-size:10px;color:#888;border-bottom:1px solid #e8e8e8;">Action</th>'}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
   }
-  document.getElementById('plBanners').innerHTML =
-    `<span class="ae-banner-pill">Roster starts 12/01 ⚠</span><span class="ae-banner-pill">Roster ends 01/02 ⚠</span>`;
+  // Under/over-allocation banner — compares how many days the source
+  // pattern expects against how many actually ended up scheduled after
+  // Regenerate. A day left "Not Scheduled" because no match was found
+  // (or, in principle, extra days added manually beyond the pattern)
+  // shows up here — matching the real app's amber warning-pill
+  // convention (e.g. "Overallocated: 41.5/40 Hours"), just on a day
+  // count instead of hours, since that's the unit that actually varies
+  // in this flow.
+  const expectedDays = sourceRoster.days.length;
+  const actualDays = sourceRoster.days.filter(d => shiftsByDay[d]).length;
+  let allocationBanner = '';
+  if(!readOnly && actualDays < expectedDays){
+    allocationBanner = `<span class="ae-banner-pill">Underallocated: ${actualDays}/${expectedDays} Days ⚠</span>`;
+  } else if(!readOnly && actualDays > expectedDays){
+    allocationBanner = `<span class="ae-banner-pill">Overallocated: ${actualDays}/${expectedDays} Days ⚠</span>`;
+  }
+  document.getElementById('plBanners').innerHTML = readOnly ? '' :
+    `${allocationBanner}<span class="ae-banner-pill">Roster starts 12/01 ⚠</span><span class="ae-banner-pill">Roster ends 01/02 ⚠</span>`;
   document.getElementById('plWeeks').innerHTML = weeksHtml;
 }
 
@@ -925,7 +1103,8 @@ function plLoadPlacement(id){
   _plCfgRadioTarget = null;
   plUpdateAgencyDisplay();
   plCloseCard();
-  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay);
+  plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
+  document.getElementById('plTableCaption').textContent = "Placement's current roster";
 }
 
 function plSwitchPlacement(id){
