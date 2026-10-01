@@ -249,9 +249,9 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 
     <div id="plFromToHeader" style="display:none;">
       <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px;">
-        <div style="width:140px;flex-shrink:0;font-size:10px;color:#6b7280;font-weight:600;">From</div>
+        <div style="width:140px;flex-shrink:0;font-size:10px;color:#6b7280;font-weight:600;">Rostered agency</div>
         <div style="visibility:hidden;" aria-hidden="true">→</div>
-        <div style="font-size:10px;color:#6b7280;font-weight:600;">To</div>
+        <div style="font-size:10px;color:#6b7280;font-weight:600;">New agency</div>
       </div>
       <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:6px;line-height:1.4;">
         ⓘ Confirmed: Configure Shifts opens the existing Add/Configure Shift side panel — this inline form is a placeholder only, not a proposed design.
@@ -396,7 +396,7 @@ const PLACEMENTS = {
   p1: {
     title: '103378 — SAA-C — Jan-15',
     currentAgencies: ['agencyc','agencyd'],
-    hint: 'Try: uncheck Agency C and Agency D, then select just <strong>Agency F</strong> to see N:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see N:N — Agency E has no shifts, so one row will need Configure Shifts.',
+    hint: 'Try: uncheck Agency C and Agency D, then select just <strong>Agency F</strong> to see N:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see N:N — Agency E has no shifts, so one row will need Configure Shifts. For the more interesting case: leave Agency C checked, uncheck only Agency D, and add <strong>Agency F</strong> — both C and D get their own row, since C still shows up (defaulting to itself) even though it never needed to move.',
     roster: {
       Mon: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Mon, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
       Wed: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Wed, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
@@ -406,7 +406,7 @@ const PLACEMENTS = {
   p2: {
     title: '104512 — SAA-C — Jan-15',
     currentAgencies: ['agencyc'],
-    hint: 'Try: uncheck Agency C, then select just <strong>Agency F</strong> to see 1:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see 1:N — Agency E has no shifts, so the row will need Configure Shifts.',
+    hint: 'Try: uncheck Agency C, then select just <strong>Agency F</strong> to see 1:1. Select <strong>Agency E</strong> + <strong>Agency F</strong> together to see 1:N — Agency E has no shifts, so the row will need Configure Shifts. Then try leaving Agency C checked and adding Agency F on top — the panel stays closed, since nothing was removed.',
     roster: {
       Mon: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Mon, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
       Wed: { ...PL_AGENCY_SCENARIOS.agencyc.shifts.Wed, agencyKey:'agencyc', agencyName: PL_AGENCY_SCENARIOS.agencyc.name },
@@ -629,7 +629,7 @@ function plRebuildCard(){
     fthHeader.style.display = 'none';
     document.getElementById('plFromToRows').innerHTML = '';
     document.getElementById('plSrcToggle').innerHTML = '';
-    desc.textContent = 'The dates or duration have changed — the roster below may need review.';
+    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
     ftr.innerHTML = `
       <button class="rna-card-link" onclick="plChooseManual()">Clear roster</button>
       <button class="rna-card-btn" onclick="plRegenerateDuration()">Regenerate roster</button>`;
@@ -660,7 +660,7 @@ function plRebuildCard(){
   const source = _plChosenSource || 'new-agency'; // matched case has no real choice — placement basis
   const names = _plSelectedAgencies;
   if(diverged){
-    desc.textContent = 'The agency has changed — the roster below may need review.';
+    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
     // One-click toggle, not a "go back and re-pick" link — switching
     // recomputes the From rows AND the roster table below in place
     // against whichever roster is now active, live, no navigation
@@ -676,7 +676,7 @@ function plRebuildCard(){
         </div>
       </div>`;
   } else {
-    desc.textContent = 'The agency has changed — the roster below may need review.';
+    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
     document.getElementById('plSrcToggle').innerHTML = '';
   }
 
@@ -686,10 +686,23 @@ function plRebuildCard(){
   document.getElementById('plRosterContent').style.display = '';
   plRenderSourceRoster(source);
 
-  // One row per FROM agency (whichever agencies currently own at least
-  // one day) — not a collapsed "+N others" summary. Each row keeps or
-  // re-defaults its own mapping; an existing choice is preserved as
-  // long as its target is still among the selected agencies.
+  // One row per FROM agency — every agency that owned at least one day
+  // on the roster before this change, compared against the full new
+  // selection, not a delta of what changed. This includes agencies
+  // still selected, not just ones that were removed.
+  //
+  // CONFIRMED (Felix, roster-regen review): "the comparison should be
+  // between the old/invalid roster + the new selection of agencies,
+  // not a delta of which ones have changed. All agencies on the old
+  // roster should be shown, even if they are still in the agency list
+  // (they should naturally default to themselves)."
+  //
+  // An agency still in the new selection gets a row defaulting to
+  // itself (see isStillSelected below) — shown as a real row so the
+  // coordinator can still redirect it if they choose, not hidden just
+  // because nothing is forcing it to move. An agency no longer
+  // selected defaults via plDefaultToFor() (alphabetically-first
+  // candidate with shifts), same as before.
   //
   // NOTE — known simplification, flagged deliberately: the From rows
   // here are always the placement's currently-active agencies, even
@@ -700,13 +713,7 @@ function plRebuildCard(){
   // That's a real, separate follow-up (showing the request's own
   // roster, since it's otherwise invisible once the placement has
   // drifted) — not solved by this sequencing change alone.
-  // BUG FIX — this used to be every currently-active agency, even ones
-  // still validly selected. If Agency D owns Friday and stays selected
-  // alongside a new pick, Agency D doesn't need a row — it's not going
-  // anywhere. Only agencies that own a day AND are no longer in the
-  // selection actually need remapping.
-  const fromKeys = _plActiveAgencyKeys
-    .filter(a => !_plSelectedAgencies.includes(a))
+  const fromKeys = [..._plActiveAgencyKeys]
     .sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
   let anyRowMissing = false;
   const rowsHtml = fromKeys.map(oldKey => {
@@ -717,9 +724,14 @@ function plRebuildCard(){
     // Shifts on a different row) — with a dozen rows already sensibly
     // mapped, nothing should cascade-change just because row #12 got
     // its shifts configured.
+    // An agency still in the current selection defaults to itself —
+    // it's not going anywhere unless the coordinator deliberately
+    // redirects it. One no longer selected defaults via the
+    // alphabetical-with-shifts rule, same as before.
+    const stillSelected = _plSelectedAgencies.includes(oldKey);
     const isValid = _plFromToMap[oldKey] && names.includes(_plFromToMap[oldKey]);
     if(!isValid){
-      _plFromToMap[oldKey] = plDefaultToFor();
+      _plFromToMap[oldKey] = stillSelected ? oldKey : plDefaultToFor();
     }
     const toKey = _plFromToMap[oldKey];
     const missing = !_plHasShifts(toKey);
