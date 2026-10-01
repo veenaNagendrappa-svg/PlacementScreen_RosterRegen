@@ -303,6 +303,11 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
 // Aug 18/21 confirmation on the 2-vs-3-button card.
 const PLACEMENT_ROSTER = { days:['Mon','Wed','Fri'], start:'06:30', end:'15:30', shift:'AM' };
 const REQUEST_ROSTER   = { days:['Mon','Fri'], start:'06:30', end:'15:30', shift:'AM' };
+// A Request can only ever have exactly one agency (0..1, never a join
+// table) — this is that single original agency, independent of
+// whatever the Placement currently has selected (which may have
+// drifted to multiple agencies since the request was first made).
+const REQUEST_AGENCY_KEY = 'agencyc';
 
 // Four agencies — enough to demonstrate every combination: C and D were
 // already here (clean + mixed match); E is zero-shift (Configure Shifts
@@ -713,8 +718,17 @@ function plRebuildCard(){
   // That's a real, separate follow-up (showing the request's own
   // roster, since it's otherwise invisible once the placement has
   // drifted) — not solved by this sequencing change alone.
-  const fromKeys = [..._plActiveAgencyKeys]
-    .sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
+  // The source toggle controls which agency set the rows are built
+  // from, not just which roster the matching runs against. Switching
+  // to Request rebuilds the rows from the Request's own single
+  // original agency — exactly one row — independent of whatever the
+  // Placement currently has selected. Switching to Placement rebuilds
+  // from the Placement's current agencies, as above. Either way, the
+  // same whole-set comparison rule applies — it's just applied
+  // against a different "old" set depending on the active source.
+  const fromKeys = (source === 'request')
+    ? [REQUEST_AGENCY_KEY]
+    : [..._plActiveAgencyKeys].sort((a,b) => _plAgencyName(a).localeCompare(_plAgencyName(b)));
   let anyRowMissing = false;
   const rowsHtml = fromKeys.map(oldKey => {
     // Sticky once set — recompute only if this row genuinely has no
