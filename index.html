@@ -127,6 +127,18 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   transform:translateY(8px);transition:all .25s;z-index:600;}
 .alloc-toast.show{opacity:1;transform:translateY(0);}
 .alloc-toast-title{font-weight:700;margin-bottom:2px;}
+[hidden]{ display:none !important; }
+.rna-card-explain { font-size:12px; line-height:1.5; color:#4a5568; margin:-6px 0 14px; }
+.tip-wrap { position:relative; display:inline-block; }
+.tip-wrap [disabled] { pointer-events:none; }
+.tip-wrap[data-tip]:hover::after { content:attr(data-tip); position:absolute; right:0; top:calc(100% + 6px); z-index:60; width:max-content; max-width:240px; background:#3b3b3b; color:#fff; font-size:11px; line-height:1.4; font-weight:400; padding:7px 10px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,.25); text-align:left; white-space:normal; }
+.pl-demo-ctrl { border:1px dashed #7dd3fc; background:#f0f9ff; border-radius:6px; padding:8px 12px 10px; margin:0 0 16px; font-size:12px; color:#0c4a6e; }
+.pl-demo-ctrl legend { font-weight:700; padding:0 4px; color:#0c4a6e; }
+.pl-demo-ctrl .pl-demo-note { font-size:11px; color:#075985; margin:0 0 6px; }
+.pl-demo-ctrl .pl-demo-grp { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; margin-top:4px; border:0; padding:0; }
+.pl-demo-ctrl .pl-demo-grp legend { font-weight:600; padding:0; margin-right:6px; float:left; }
+.pl-demo-ctrl .pl-demo-grp.dim { opacity:.55; }
+.pl-demo-ctrl label { cursor:pointer; }
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;padding:0;margin:-1px;}
 </style>
 </head>
@@ -214,11 +226,11 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
   <div class="row">
     <div class="col-md-6">
       <label class="field-label">Placement Dates <span class="req">*</span></label>
-      <input class="field-input" id="plDates" value="15/01/2026 – 09/02/2026" onchange="plDurationChanged()">
+      <input class="field-input" id="plDates" value="15/01/2026 – 09/02/2026" onchange="plDurationChanged('dates')">
     </div>
     <div class="col-md-6">
       <label class="field-label">Duration <span class="req">*</span></label>
-      <input class="field-input" id="plDuration" value="18 Days" onchange="plDurationChanged()">
+      <input class="field-input" id="plDuration" value="18 Days" onchange="plDurationChanged('duration')">
     </div>
   </div>
 
@@ -232,6 +244,22 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
       <input class="field-input" value="No" readonly>
     </div>
   </div>
+
+  <fieldset class="pl-demo-ctrl" id="plDemoCtrl">
+    <legend>Demo controls (prototype only)</legend>
+    <p class="pl-demo-note">Change Placement Dates or Duration to open the panel. These settings decide what Regenerate does.</p>
+    <fieldset class="pl-demo-grp">
+      <legend>Roster built from</legend>
+      <label><input type="radio" name="plDemoSource" value="pattern" checked onchange="plDemoChanged()"> Pattern</label>
+      <label><input type="radio" name="plDemoSource" value="calendar" onchange="plDemoChanged()"> Calendar</label>
+    </fieldset>
+    <fieldset class="pl-demo-grp dim" id="plDemoOverlapGrp">
+      <legend>New dates vs existing roster days</legend>
+      <label><input type="radio" name="plDemoOverlap" value="some" checked disabled onchange="plDemoChanged()"> Some overlap</label>
+      <label><input type="radio" name="plDemoOverlap" value="none" disabled onchange="plDemoChanged()"> No overlap</label>
+      <span style="font-size:11px;color:#075985;" id="plDemoOverlapHint">(applies after you change Placement Dates)</span>
+    </fieldset>
+  </fieldset>
 
   <div class="section-title">Schedule</div>
 
@@ -254,15 +282,13 @@ body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-ser
       <div id="plSrcToggle"></div>
     </div>
     <div class="rna-card-desc" id="plCardDesc"></div>
+    <div class="rna-card-explain" id="plCardExplain" hidden></div>
 
     <div id="plFromToHeader" style="display:none;">
       <div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px;">
         <div style="width:140px;flex-shrink:0;font-size:10px;color:#6b7280;font-weight:600;">Rostered agency</div>
         <div style="visibility:hidden;" aria-hidden="true">→</div>
         <div style="font-size:10px;color:#6b7280;font-weight:600;">New agency</div>
-      </div>
-      <div style="font-size:10px;color:#7c6f00;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:4px 7px;margin-bottom:6px;line-height:1.4;">
-        ⓘ Confirmed: Configure Shifts opens the existing Add/Configure Shift side panel — this inline form is a placeholder only, not a proposed design.
       </div>
     </div>
     <div id="plFromToRows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
@@ -394,7 +420,7 @@ function plBuildSourceRosterByDay(source){
 function plRenderSourceRoster(source){
   const shiftsByDay = plBuildSourceRosterByDay(source);
   const sourceRoster = source === 'request' ? REQUEST_ROSTER : PLACEMENT_ROSTER;
-  const label = source === 'request' ? "Request's original roster" : "Placement's current roster";
+  const label = source === 'request' ? "Request's current roster" : "Placement's current roster";
   plRenderRosterMulti(sourceRoster, shiftsByDay, true); // read-only — mapping in progress, this is about to be replaced
   document.getElementById('plTableCaption').textContent = label;
   document.getElementById('plSourceLive').textContent = `Showing ${label}.`;
@@ -540,8 +566,81 @@ document.addEventListener('click', function(e){
 // Date/duration changed, agency untouched — the simpler flow confirmed
 // across the Aug 10/18/21 grooming calls: no source picker, no agency
 // mapping, just Clear roster / Regenerate roster.
-function plDurationChanged(){
+const PL_TEXT = {
+  noOverlap: "These dates don't overlap with the existing roster — Regenerate can't produce any shifts.",
+  agencyLine: "Regenerate keeps each day's shift and matches it to the new agency.",
+  partial: "Only days inside the new dates are regenerated.",
+  patternLine: "Regenerate rebuilds the roster from its pattern.",
+  durationLine: "Regenerate adjusts the roster to the new duration."
+};
+// What changed in this disruption (duration mode). Both inputs can change.
+let _plDatesChanged = false;
+let _plDurChanged = false;
+function plResetChangeFlags(){ _plDatesChanged = false; _plDurChanged = false; plDemoSyncOverlap(); }
+
+function plDemoState(){
+  const src = document.querySelector('input[name="plDemoSource"]:checked');
+  const ov = document.querySelector('input[name="plDemoOverlap"]:checked');
+  return { p: !src || src.value === 'pattern', o: ov ? ov.value : 'some' };
+}
+// Overlap only means something once the dates have changed
+function plDemoSyncOverlap(){
+  const grp = document.getElementById('plDemoOverlapGrp');
+  if(!grp) return;
+  grp.classList.toggle('dim', !_plDatesChanged);
+  document.querySelectorAll('input[name="plDemoOverlap"]').forEach(r => { r.disabled = !_plDatesChanged; });
+  document.getElementById('plDemoOverlapHint').hidden = _plDatesChanged;
+}
+function plDemoChanged(){
+  if(_plCardMode === 'duration' && document.getElementById('plCard').style.display !== 'none') plRebuildCard();
+}
+
+// Message from what changed: agency / dates / duration
+function plChangeMessage(a, d, u){
+  const parts = [];
+  if(a) parts.push('agency');
+  if(d) parts.push('dates');
+  if(u) parts.push('duration');
+  const list = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+  const verb = (parts.length === 1 && parts[0] !== 'dates') ? 'has' : 'have';
+  return 'Your ' + list + ' ' + verb + ' changed. Choose how to update the roster.';
+}
+
+// Date/duration decision (agency unchanged), per the agreed matrix
+function plDurationDecide(d, u, p, o){
+  if(p) return { disabled:false, reason:'', info: PL_TEXT.patternLine };
+  if(d && o === 'none') return { disabled:true, reason: PL_TEXT.noOverlap, info:'' };
+  return { disabled:false, reason:'', info: d ? PL_TEXT.partial : PL_TEXT.durationLine };
+}
+
+function plSetRegen(disabled, reason){
+  const btn = document.getElementById('plBtnRegen');
+  const tip = document.getElementById('plRegenTip');
+  const why = document.getElementById('plRegenReason');
+  if(!btn) return;
+  btn.disabled = !!disabled;
+  if(disabled && reason){
+    tip.setAttribute('data-tip', reason);
+    why.textContent = reason;
+    btn.setAttribute('aria-describedby', 'plRegenReason');
+  } else {
+    tip.removeAttribute('data-tip');
+    why.textContent = '';
+    btn.removeAttribute('aria-describedby');
+  }
+}
+function plSetExplain(text){
+  const el = document.getElementById('plCardExplain');
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
+function plDurationChanged(which){
   if(!plHasExistingRoster()) return;
+  if(_plCardMode !== 'duration') plResetChangeFlags();
+  if(which === 'dates') _plDatesChanged = true;
+  if(which === 'duration') _plDurChanged = true;
+  plDemoSyncOverlap();
   _plCardMode = 'duration';
   plRosterIntoCard();
   plRebuildCard();
@@ -552,14 +651,19 @@ function plDurationChanged(){
 // all here; this is genuinely just "repeat the same weekly pattern for
 // more/fewer weeks," not a re-match against any agency.
 function plRegenerateDuration(){
+  const st = plDemoState();
+  const dec = plDurationDecide(_plDatesChanged, _plDurChanged, st.p, st.o);
+  if(dec.disabled) return;
   plCloseCard();
   plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
-  plToast('Roster regenerated', 'Fitted the existing pattern to the new dates and duration.');
+  plToast('Roster regenerated', dec.info);
   _plCardMode = 'agency'; // reset for the next disruption
+  plResetChangeFlags();
 }
 
 function plOnSelectionChanged(){
   _plCardMode = 'agency';
+  plResetChangeFlags();
   plCloseCfgPanel();
   // BUG FIX — the old check only asked "is at least one active agency
   // still selected?" and treated that as fully safe. That's wrong: if
@@ -642,10 +746,14 @@ function plRebuildCard(){
     fthHeader.style.display = 'none';
     document.getElementById('plFromToRows').innerHTML = '';
     document.getElementById('plSrcToggle').innerHTML = '';
-    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
+    const st = plDemoState();
+    const dec = plDurationDecide(_plDatesChanged, _plDurChanged, st.p, st.o);
+    desc.textContent = plChangeMessage(false, _plDatesChanged, _plDurChanged);
     ftr.innerHTML = `
       <button class="rna-card-link" onclick="plChooseManual()">Clear roster</button>
-      <button class="rna-card-btn" onclick="plRegenerateDuration()">Regenerate roster</button>`;
+      <span class="tip-wrap" id="plRegenTip"><button class="rna-card-btn" id="plBtnRegen" onclick="plRegenerateDuration()">Regenerate roster</button><span class="sr-only" id="plRegenReason"></span></span>`;
+    plSetRegen(dec.disabled, dec.reason);
+    plSetExplain(dec.disabled ? '' : dec.info);
     document.getElementById('plCard').style.display = '';
     document.getElementById('plRosterContent').style.display = '';
     plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, true); // read-only reference — no action column, no warnings, matches the agency-mode treatment
@@ -673,7 +781,7 @@ function plRebuildCard(){
   const source = _plChosenSource || 'new-agency'; // matched case has no real choice — placement basis
   const names = _plSelectedAgencies;
   if(diverged){
-    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
+    desc.textContent = plChangeMessage(true, false, false);
     // One-click toggle, not a "go back and re-pick" link — switching
     // recomputes the From rows AND the roster table below in place
     // against whichever roster is now active, live, no navigation
@@ -689,7 +797,7 @@ function plRebuildCard(){
         </div>
       </div>`;
   } else {
-    desc.textContent = 'This change requires the roster to be updated. Choose how to proceed.';
+    desc.textContent = plChangeMessage(true, false, false);
     document.getElementById('plSrcToggle').innerHTML = '';
   }
 
@@ -808,7 +916,9 @@ function plRebuildCard(){
   // lives only in the description text above (desc), not the button.
   ftr.innerHTML = `
     <button class="rna-card-link" onclick="plChooseManual()">Clear roster</button>
-    <button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">Regenerate roster</button>`;
+    <span class="tip-wrap" id="plRegenTip"><button class="rna-card-btn" id="plBtnRegen" ${anyRowMissing?'disabled':''} onclick="plChooseRegenerateMulti('${source}')">Regenerate roster</button><span class="sr-only" id="plRegenReason"></span></span>`;
+  // Disabled because a new agency has no shifts: no line, no tooltip (the inline Configure shifts warning explains)
+  plSetExplain(anyRowMissing ? '' : PL_TEXT.agencyLine);
   plCloseCfgPanel();
 }
 
@@ -878,19 +988,15 @@ function plCloseCard(){
   plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
   document.getElementById('plTableCaption').textContent = "Placement's current roster";
   plSetActionButtonsDisabled(false);
+  plSetExplain('');
   plCloseCfgPanel();
 }
 
 function plChooseManual(){
   plCloseCard();
-  if(_plCardMode === 'duration'){
-    // Retain the current roster exactly as-is — per Aug 10/18/21
-    // grooming, manual on a duration-only change doesn't wipe anything,
-    // it just lets the coordinator keep editing what's already there.
-    plToast('Roster kept as-is', 'The current roster is unchanged — adjust it manually below if the new dates or duration need different days.');
-    _plCardMode = 'agency'; // reset for next disruption
-    return;
-  }
+  // Clear roster always blanks the roster, on every trigger (agency, dates, duration).
+  _plCardMode = 'agency'; // reset for next disruption
+  plResetChangeFlags();
   _plCurrentAgencies = [..._plSelectedAgencies];
   _plActiveAgencyKeys = []; // manual roster — nothing is auto-matched, so nothing counts as "still active"
   _plCurrentRosterByDay = {};
@@ -902,7 +1008,7 @@ function plChooseManual(){
     <div style="font-size:12px;color:#9ca3af;font-style:italic;padding:16px 0;text-align:center;border:1px dashed #e2e5ea;border-radius:6px;">
       No standard days — define the roster manually below.
     </div>`;
-  plToast('Roster cleared', 'The old roster no longer applies to the new agency selection — define it manually.');
+  plToast('Roster cleared', 'Define the roster manually below.');
 }
 
 function _plTimeToMin(t){ const [h,m] = (t||'0:00').split(':').map(Number); return h*60 + (m||0); }
@@ -1135,6 +1241,8 @@ function plLoadPlacement(id){
   _plFromToMap = {};
   _plChosenSource = null;
   _plCfgRadioTarget = null;
+  _plCardMode = 'agency';
+  plResetChangeFlags();
   plUpdateAgencyDisplay();
   plCloseCard();
   plRenderRosterMulti(PLACEMENT_ROSTER, _plCurrentRosterByDay, false);
